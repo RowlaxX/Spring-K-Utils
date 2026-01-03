@@ -1,1 +1,1 @@
-rootProject.name = "spring-k-utils"
+rootProject.name = "Spring-K-Utils"
