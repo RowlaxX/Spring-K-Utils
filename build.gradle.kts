@@ -9,7 +9,7 @@ plugins {
 
 group = "fr.rowlaxx"
 version = "1.0.0"
-description = "spring-k-utils"
+description = "Spring-K-Utils"
 
 java {
     toolchain {
