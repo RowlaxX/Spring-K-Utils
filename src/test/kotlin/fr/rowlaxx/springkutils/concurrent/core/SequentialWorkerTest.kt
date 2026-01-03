@@ -8,6 +8,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class SequentialWorkerTest {
@@ -226,5 +227,81 @@ class SequentialWorkerTest {
         assertEquals(submissionThreads * tasksPerThread, counter.get())
         assertFalse(worker.isRunning)
         assertEquals(0, worker.pendingTasksCount)
+    }
+
+    @Test
+    fun `cancelled task should not execute`() {
+        val taskExecuted = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        // Block the worker with a first task
+        worker.submitTask {
+            latch.await()
+        }
+
+        // Submit a second task and cancel it immediately
+        val future = worker.submitTask {
+            taskExecuted.set(true)
+        }
+        future.cancel(false)
+
+        // Unblock the worker
+        latch.countDown()
+
+        // Give it some time to process
+        Thread.sleep(100)
+
+        assertFalse(taskExecuted.get(), "Task should not have executed because it was cancelled")
+    }
+
+    @Test
+    fun `cancelled async task should not execute`() {
+        val taskExecuted = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+
+        // Block the worker with a first task
+        worker.submitTask {
+            latch.await()
+        }
+
+        // Submit a second task and cancel it immediately
+        val future = worker.submitAsyncTask {
+            taskExecuted.set(true)
+            CompletableFuture.completedFuture(Unit)
+        }
+        future.cancel(false)
+
+        // Unblock the worker
+        latch.countDown()
+
+        // Give it some time to process
+        Thread.sleep(100)
+
+        assertFalse(taskExecuted.get(), "Async task should not have executed because it was cancelled")
+    }
+
+    @Test
+    fun `cancelling running async task should move to next task`() {
+        val nextTaskExecuted = AtomicBoolean(false)
+        val innerFuture = CompletableFuture<Unit>()
+
+        val future = worker.submitAsyncTask {
+            innerFuture
+        }
+
+        val nextFuture = worker.submitTask {
+            nextTaskExecuted.set(true)
+        }
+
+        // Give it some time to start the first task
+        Thread.sleep(50)
+
+        // Cancel the first future
+        future.cancel(false)
+
+        // Wait for next task
+        nextFuture.get(1, TimeUnit.SECONDS)
+
+        assertTrue(nextTaskExecuted.get(), "Next task should execute after the previous one was cancelled")
     }
 }

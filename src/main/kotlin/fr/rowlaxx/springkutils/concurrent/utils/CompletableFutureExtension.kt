@@ -124,7 +124,7 @@ object CompletableFutureExtension {
      * @param action The action to execute.
      * @return A new [CompletableFuture] that completes with [Unit] when the [action] is finished.
      */
-    fun <T> CompletableFuture<T>.onDone(action: () -> Unit): CompletableFuture<Unit> = handle { _, _ -> action() }
+    fun <T> CompletableFuture<T>.onDone(action: (T?, Throwable?) -> Unit): CompletableFuture<Unit> = handle(action)
 
     /**
      * Asynchronously executes the [action] when the future is done (successfully, with error, or cancelled).
@@ -132,11 +132,11 @@ object CompletableFutureExtension {
      * @param action The action returning a [CompletableFuture].
      * @return A new [CompletableFuture] that completes when the future returned by [action] is finished.
      */
-    fun <T> CompletableFuture<T>.composeOnDone(action: () -> CompletableFuture<Unit>): CompletableFuture<Unit> {
+    fun <T> CompletableFuture<T>.composeOnDone(action: (T?, Throwable?) -> CompletableFuture<Unit>): CompletableFuture<Unit> {
         val result = CompletableFuture<Unit>()
-        this.whenComplete { _, _ ->
+        this.whenComplete { r, e ->
             try {
-                action().whenComplete { res2, ex2 ->
+                action(r, e).whenComplete { res2, ex2 ->
                     if (ex2 != null) result.completeExceptionally(ex2)
                     else result.complete(res2)
                 }

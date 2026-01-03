@@ -1,5 +1,7 @@
 package fr.rowlaxx.springkutils.concurrent.core
 
+import fr.rowlaxx.springkutils.concurrent.utils.CompletableFutureExtension.onCancelled
+import fr.rowlaxx.springkutils.concurrent.utils.CompletableFutureExtension.onError
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
@@ -13,6 +15,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * For asynchronous tasks ([submitAsyncTask]), the worker waits for the returned [CompletableFuture]
  * to complete before picking up the next task from the queue.
+ *
+ * Tasks can be cancelled by calling [CompletableFuture.cancel] on the future returned by the submission
+ * methods. If a task is cancelled before it starts, it will be skipped. If an asynchronous task is
+ * cancelled while it is running, the underlying future returned by the task will also be cancelled.
  *
  * This class is thread-safe.
  *
@@ -54,7 +60,7 @@ class SequentialWorker(
 
         while (!queue.isEmpty()) {
             val task = queue.poll() ?: continue
-            task.future.completeExceptionally(IllegalStateException("Worker has been retired"))
+            task.future.cancel(false)
         }
     }
     
@@ -63,6 +69,9 @@ class SequentialWorker(
      *
      * If the worker is retired, the returned [CompletableFuture] will be immediately exceptionally completed with a
      * [IllegalStateException]
+     *
+     * The task can be cancelled via the returned [CompletableFuture]. If cancelled before execution,
+     * the task will be removed from the queue and not executed.
      *
      * @param task The task to execute.
      * @return A [CompletableFuture] that completes when the task is finished.
@@ -73,8 +82,12 @@ class SequentialWorker(
         }
         
         val future = CompletableFuture<T>()
-        queue.add(SyncTask(task, future))
+        val task = SyncTask(task, future)
+
+        future.onCancelled { queue.remove(task) }
+        queue.add(task)
         trySchedule()
+
         return future
     }
 
@@ -87,6 +100,9 @@ class SequentialWorker(
      * If the worker is retired, the returned [CompletableFuture] will be immediately exceptionally completed with a
      * [IllegalStateException]
      *
+     * The task can be cancelled via the returned [CompletableFuture]. If cancelled before execution,
+     * it will be skipped. If cancelled while running, the future returned by the [task] will be cancelled.
+     *
      * @param task A function returning a [CompletableFuture].
      * @return A [CompletableFuture] that completes when the task's future completes.
      */
@@ -96,8 +112,12 @@ class SequentialWorker(
         }
         
         val future = CompletableFuture<T>()
-        queue.add(AsyncTask(task, future))
+        val task = AsyncTask(task, future)
+
+        future.onCancelled { queue.remove(task) }
+        queue.add(task)
         trySchedule()
+
         return future
     }
 
@@ -111,6 +131,7 @@ class SequentialWorker(
         if (isRunning) {
             return CompletableFuture.failedFuture(IllegalStateException("Worker is busy"))
         }
+
         return submitTask(task)
     }
 
@@ -124,18 +145,22 @@ class SequentialWorker(
         if (isRunning) {
             return CompletableFuture.failedFuture(IllegalStateException("Worker is busy"))
         }
+
         return submitAsyncTask(task)
     }
 
     private fun trySchedule(recursive: Boolean = false, executorContext: Boolean = false) {
         if (recursive || processing.compareAndSet(false, true)) {
             val nextTask = queue.poll()
-            nextTask.future.isCancelled
+
             if (nextTask == null) {
                 processing.set(false)
             }
             else if (isRetired) {
-                nextTask.future.completeExceptionally(IllegalStateException("Worker has been retired"))
+                nextTask.future.cancel(false)
+                trySchedule(recursive = true)
+            }
+            else if (nextTask.future.isCompletedExceptionally) {
                 trySchedule(recursive = true)
             }
             else {
@@ -176,7 +201,10 @@ class SequentialWorker(
     ) : InternalTask<T> {
         override fun run() {
             try {
-                action().whenComplete { result, throwable ->
+                val actionFuture = action()
+                future.onCancelled { actionFuture.cancel(true) }
+
+                actionFuture.handle { result, throwable ->
                     if (throwable != null) {
                         future.completeExceptionally(throwable)
                     } else {

@@ -55,7 +55,7 @@ class CompletableFutureExtensionTest {
     fun `onDone should run on success`() {
         var called = false
         val future = CompletableFuture.completedFuture(5)
-        future.onDone { called = true }.get()
+        future.onDone { _, _ -> called = true }.get()
         assertTrue(called)
     }
 
@@ -63,7 +63,7 @@ class CompletableFutureExtensionTest {
     fun `onDone should run on error`() {
         var called = false
         val future = CompletableFuture.failedFuture<Int>(RuntimeException())
-        future.onDone { called = true }.handle { _, _ -> }.get()
+        future.onDone { _, _ -> called = true }.handle { _, _ -> }.get()
         assertTrue(called)
     }
 
@@ -93,8 +93,8 @@ class CompletableFutureExtensionTest {
     fun `composeOnDone should run on success`() {
         var called = false
         val future = CompletableFuture.completedFuture(5)
-        future.composeOnDone { 
-            called = true
+        future.composeOnDone { _, _ ->
+        called = true
             CompletableFuture.completedFuture(Unit)
         }.get()
         assertTrue(called)
@@ -181,7 +181,7 @@ class CompletableFutureExtensionTest {
     fun `onDone should fail if action throws`() {
         val future = CompletableFuture.completedFuture(5)
         val expectedEx = RuntimeException("action failed")
-        val resultFuture = future.onDone { throw expectedEx }
+        val resultFuture = future.onDone { _, _ -> throw expectedEx }
         val ex = assertFailsWith<ExecutionException> { resultFuture.get() }
         assertEquals(expectedEx, ex.cause)
     }
@@ -190,7 +190,7 @@ class CompletableFutureExtensionTest {
     fun `composeOnDone should fail if action throws`() {
         val future = CompletableFuture.completedFuture(5)
         val expectedEx = RuntimeException("action failed")
-        val resultFuture = future.composeOnDone { throw expectedEx }
+        val resultFuture = future.composeOnDone { _, _ -> throw expectedEx }
         val ex = assertFailsWith<ExecutionException> { resultFuture.get() }
         assertEquals(expectedEx, ex.cause)
     }
@@ -199,7 +199,7 @@ class CompletableFutureExtensionTest {
     fun `composeOnDone should fail if action returns failed future`() {
         val future = CompletableFuture.completedFuture(5)
         val expectedEx = RuntimeException("future failed")
-        val resultFuture = future.composeOnDone { CompletableFuture.failedFuture<Unit>(expectedEx) }
+        val resultFuture = future.composeOnDone { _, _ -> CompletableFuture.failedFuture<Unit>(expectedEx) }
         val ex = assertFailsWith<ExecutionException> { resultFuture.get() }
         assertEquals(expectedEx, ex.cause)
     }
