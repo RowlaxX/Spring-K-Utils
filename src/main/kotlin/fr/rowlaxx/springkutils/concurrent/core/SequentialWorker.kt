@@ -26,15 +26,23 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class SequentialWorker(
     private val executor: ExecutorService,
+    enabled: Boolean = true
 ) {
     private val queue = ConcurrentLinkedQueue<InternalTask<*>>()
     private val processing = AtomicBoolean(false)
     private val retired = AtomicBoolean(false)
+    private val enabled = AtomicBoolean(enabled)
     
     /**
      * True if the worker is currently processing a task.
      */
     val isRunning: Boolean get() = processing.get()
+
+    /**
+     * True if the worker is enabled and can process tasks.
+     * When disabled, the worker will not start any new tasks from the queue.
+     */
+    val isEnabled: Boolean get() = enabled.get()
 
     /**
      * True if the worker has been retired. A retired worker does not accept new tasks
@@ -61,6 +69,22 @@ class SequentialWorker(
         while (!queue.isEmpty()) {
             val task = queue.poll() ?: continue
             task.future.cancel(false)
+        }
+    }
+    
+    /**
+     * Enables or disables the worker.
+     * 
+     * When [value] is true, the worker is enabled and will start processing tasks from the queue.
+     * When [value] is false, the worker is disabled and will stop picking up new tasks until it's enabled again.
+     * 
+     * @param value True to enable, false to disable.
+     */
+    fun enabled(value: Boolean) {
+        enabled.set(value)
+        
+        if (value) {
+            trySchedule()   
         }
     }
     
@@ -150,6 +174,14 @@ class SequentialWorker(
     }
 
     private fun trySchedule(recursive: Boolean = false, executorContext: Boolean = false) {
+        if (!isRunning && !isEnabled) {
+            return
+        }
+        else if (recursive && !isEnabled) {
+            processing.set(false)
+            return
+        }
+
         if (recursive || processing.compareAndSet(false, true)) {
             val nextTask = queue.poll()
 
@@ -202,6 +234,7 @@ class SequentialWorker(
         override fun run() {
             try {
                 val actionFuture = action()
+                val executorThread = Thread.currentThread()
                 future.onCancelled { actionFuture.cancel(true) }
 
                 actionFuture.handle { result, throwable ->
@@ -210,11 +243,15 @@ class SequentialWorker(
                     } else {
                         future.complete(result)
                     }
-                    trySchedule(recursive = true)
+                    
+                    val currentThread = Thread.currentThread()
+                    val executorContext = executorThread === currentThread
+                    
+                    trySchedule(recursive = true, executorContext = executorContext)
                 }
             } catch (e: Throwable) {
                 future.completeExceptionally(e)
-                trySchedule(recursive = true)
+                trySchedule(recursive = true, executorContext = true)
             }
         }
     }

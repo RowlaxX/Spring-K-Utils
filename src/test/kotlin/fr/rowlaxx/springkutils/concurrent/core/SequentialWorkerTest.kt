@@ -304,4 +304,61 @@ class SequentialWorkerTest {
 
         assertTrue(nextTaskExecuted.get(), "Next task should execute after the previous one was cancelled")
     }
+
+    @Test
+    fun `worker should respect isEnabled state`() {
+        val disabledWorker = SequentialWorker(executor, enabled = false)
+        assertFalse(disabledWorker.isEnabled)
+
+        val taskExecuted = AtomicBoolean(false)
+        val future = disabledWorker.submitTask {
+            taskExecuted.set(true)
+            "done"
+        }
+
+        // Give it some time to potentially execute
+        Thread.sleep(100)
+        assertFalse(taskExecuted.get(), "Task should not execute when worker is disabled")
+        assertFalse(future.isDone)
+
+        disabledWorker.enabled(true)
+        assertTrue(disabledWorker.isEnabled)
+
+        assertEquals("done", future.get(1, TimeUnit.SECONDS))
+        assertTrue(taskExecuted.get(), "Task should execute after worker is enabled")
+    }
+
+    @Test
+    fun `disabling worker should stop picking up new tasks`() {
+        val counter = AtomicInteger(0)
+        val latch = CountDownLatch(1)
+
+        val firstTask = worker.submitTask {
+            latch.await()
+            counter.incrementAndGet()
+        }
+
+        val secondTask = worker.submitTask {
+            counter.incrementAndGet()
+        }
+
+        // Give it time to start first task
+        Thread.sleep(50)
+
+        worker.enabled(false)
+        assertFalse(worker.isEnabled)
+
+        latch.countDown()
+        firstTask.get(1, TimeUnit.SECONDS)
+        assertEquals(1, counter.get())
+
+        // Give it time to potentially pick up second task
+        Thread.sleep(100)
+        assertEquals(1, counter.get(), "Second task should not have started because worker is disabled")
+        assertFalse(secondTask.isDone)
+
+        worker.enabled(true)
+        secondTask.get(1, TimeUnit.SECONDS)
+        assertEquals(2, counter.get())
+    }
 }
