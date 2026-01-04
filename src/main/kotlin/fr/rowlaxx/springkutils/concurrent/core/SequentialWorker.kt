@@ -65,6 +65,7 @@ class SequentialWorker(
      */
     fun retire() {
         retired.set(true)
+        enabled.set(false)
 
         while (!queue.isEmpty()) {
             val task = queue.poll() ?: continue
@@ -81,6 +82,10 @@ class SequentialWorker(
      * @param value True to enable, false to disable.
      */
     fun enabled(value: Boolean) {
+        if (isRetired) {
+            return
+        }
+
         enabled.set(value)
         
         if (value) {
