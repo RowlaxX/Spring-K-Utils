@@ -135,6 +135,7 @@ object ExecutorsUtils {
             return proxy.invokeAll(tasks.map { it?.let { wrap(it) } }, timeout, unit)
         }
 
+        @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
         override fun <T : Any?> invokeAny(tasks: Collection<Callable<T?>?>): T & Any {
             return proxy.invokeAny(tasks.map { it?.let { wrap(it) } })!!
         }
