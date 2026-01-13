@@ -25,6 +25,7 @@ object ReflectionUtils {
 
         org.springframework.util.ReflectionUtils.doWithMethods(type) {
             it.getAnnotation(annotation.java)?.let { a ->
+                it.isAccessible = true
                 result.add(a to it)
             }
         }
@@ -46,6 +47,7 @@ object ReflectionUtils {
 
         org.springframework.util.ReflectionUtils.doWithFields(type) {
             it.getAnnotation(annotation.java)?.let { a ->
+                it.isAccessible = true
                 result.add(a to it)
             }
         }
@@ -67,6 +69,7 @@ object ReflectionUtils {
 
         org.springframework.util.ReflectionUtils.doWithMethods(instanceType) {
             if (it.returnType == type) {
+                it.isAccessible = true
                 result.add(it)
             }
         }
@@ -88,6 +91,7 @@ object ReflectionUtils {
 
         org.springframework.util.ReflectionUtils.doWithFields(instanceType) {
             if (it.type == type) {
+                it.isAccessible = true
                 result.add(it)
             }
         }
