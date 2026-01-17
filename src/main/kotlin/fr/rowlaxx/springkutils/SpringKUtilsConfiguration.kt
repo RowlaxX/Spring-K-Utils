@@ -10,9 +10,5 @@ import org.springframework.context.annotation.Configuration
 @ComponentScan(basePackageClasses = [SpringKUtilsConfiguration::class])
 class SpringKUtilsConfiguration {
 
-    @PostConstruct
-    fun init() {
-        log.info("Spring K Utils Initialized")
-    }
 
 }

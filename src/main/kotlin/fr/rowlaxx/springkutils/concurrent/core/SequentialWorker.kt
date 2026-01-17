@@ -2,6 +2,7 @@ package fr.rowlaxx.springkutils.concurrent.core
 
 import fr.rowlaxx.springkutils.concurrent.utils.CompletableFutureExtension.onCancelled
 import fr.rowlaxx.springkutils.concurrent.utils.CompletableFutureExtension.onError
+import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
@@ -226,6 +227,7 @@ class SequentialWorker(
             try {
                 future.complete(action())
             } catch (e: Throwable) {
+                log.error("Error while executing task", e)
                 future.completeExceptionally(e)
             }
             trySchedule(recursive = true, executorContext = true)
@@ -244,6 +246,7 @@ class SequentialWorker(
 
                 actionFuture.handle { result, throwable ->
                     if (throwable != null) {
+                        log.error("Error while executing task", throwable)
                         future.completeExceptionally(throwable)
                     } else {
                         future.complete(result)
@@ -255,6 +258,7 @@ class SequentialWorker(
                     trySchedule(recursive = true, executorContext = executorContext)
                 }
             } catch (e: Throwable) {
+                log.error("Error while executing task", e)
                 future.completeExceptionally(e)
                 trySchedule(recursive = true, executorContext = true)
             }
