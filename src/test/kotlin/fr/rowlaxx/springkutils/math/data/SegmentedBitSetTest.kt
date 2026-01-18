@@ -165,6 +165,40 @@ class SegmentedBitSetTest {
     }
 
     @Test
+    fun testHasNextHasPrevious() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..20L)
+        bitset.addAll(40L..50L)
+
+        // hasNext
+        assertTrue(bitset.hasNext(0))
+        assertTrue(bitset.hasNext(10))
+        assertTrue(bitset.hasNext(15))
+        assertTrue(bitset.hasNext(20))
+        assertTrue(bitset.hasNext(21))
+        assertTrue(bitset.hasNext(40))
+        assertTrue(bitset.hasNext(50))
+        assertFalse(bitset.hasNext(51))
+
+        // hasPrevious
+        assertFalse(bitset.hasPrevious(0))
+        assertFalse(bitset.hasPrevious(9))
+        assertTrue(bitset.hasPrevious(10))
+        assertTrue(bitset.hasPrevious(15))
+        assertTrue(bitset.hasPrevious(20))
+        assertTrue(bitset.hasPrevious(21))
+        assertTrue(bitset.hasPrevious(39))
+        assertTrue(bitset.hasPrevious(40))
+        assertTrue(bitset.hasPrevious(50))
+        assertTrue(bitset.hasPrevious(100))
+
+        // Empty
+        val empty = SegmentedBitSet()
+        assertFalse(empty.hasNext(0))
+        assertFalse(empty.hasPrevious(0))
+    }
+
+    @Test
     fun testSubset() {
         val bitset = MutableSegmentedBitSet()
         bitset.addAll(0L..100L)

@@ -549,4 +549,21 @@ class SparseVectorTest {
         val zero = p1 cross p2
         assertEquals(0, zero.nonZeroCount())
     }
+
+    @Test
+    fun testSum() {
+        val v = MutableSparseVector()
+        // Test 1: Empty vector
+        assertEquals(0.0, v.sum())
+
+        // Test 2: Vector with elements
+        v[0] = 1.0
+        v[5] = 2.0
+        v[10] = -0.5
+        assertEquals(2.5, v.sum())
+
+        // Test 3: Vector with zero resulting sum
+        v[15] = -2.5
+        assertEquals(0.0, v.sum())
+    }
 }
