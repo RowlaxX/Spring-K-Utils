@@ -203,6 +203,11 @@ open class SparseVector(
         }
         return SparseVector(result)
     }
+    
+    /**
+     * Returns the sum of all elements in this vector.
+     */
+    fun sum(): Double = content.values.sum()
 
     /**
      * Returns the Euclidean distance between this vector and [other].

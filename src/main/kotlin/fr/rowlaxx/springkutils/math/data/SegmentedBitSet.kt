@@ -173,6 +173,23 @@ open class SegmentedBitSet internal constructor(
         val previousEntry = content.lowerEntry(from) ?: throw NoSuchElementException()
         return previousEntry.value
     }
+    
+    /**
+     * Returns true if there is at least one number present in this bit set that is greater than or equal to [from].
+     */
+    fun hasNext(from: Long): Boolean {
+        val entry = content.floorEntry(from)
+        if (entry != null && from <= entry.value) return true
+        return content.ceilingKey(from) != null
+    }
+
+    /**
+     * Returns true if there is at least one number present in this bit set that is less than or equal to [from].
+     */
+    fun hasPrevious(from: Long): Boolean {
+        val entry = content.floorEntry(from)
+        return entry != null
+    }
 
     /**
      * Returns the smallest number NOT present in this bit set that is greater than or equal to [from].

@@ -179,7 +179,7 @@ class SequentialWorker(
         return submitAsyncTask(task)
     }
 
-    private fun trySchedule(recursive: Boolean = false, executorContext: Boolean = false) {
+    private fun trySchedule(recursive: Boolean = false) {
         if (!isRunning && !isEnabled) {
             return
         }
@@ -202,12 +202,7 @@ class SequentialWorker(
                 trySchedule(recursive = true)
             }
             else {
-                if (executorContext) {
-                    nextTask.run()
-                }
-                else {
-                    executor.submit(nextTask::run)
-                }
+                executor.submit(nextTask::run)
             }
         }
     }
@@ -230,7 +225,7 @@ class SequentialWorker(
                 log.error("Error while executing task", e)
                 future.completeExceptionally(e)
             }
-            trySchedule(recursive = true, executorContext = true)
+            trySchedule(recursive = true)
         }
     }
     
@@ -241,7 +236,6 @@ class SequentialWorker(
         override fun run() {
             try {
                 val actionFuture = action()
-                val executorThread = Thread.currentThread()
                 future.onCancelled { actionFuture.cancel(true) }
 
                 actionFuture.handle { result, throwable ->
@@ -251,16 +245,13 @@ class SequentialWorker(
                     } else {
                         future.complete(result)
                     }
-                    
-                    val currentThread = Thread.currentThread()
-                    val executorContext = executorThread === currentThread
-                    
-                    trySchedule(recursive = true, executorContext = executorContext)
+
+                    trySchedule(recursive = true)
                 }
             } catch (e: Throwable) {
                 log.error("Error while executing task", e)
                 future.completeExceptionally(e)
-                trySchedule(recursive = true, executorContext = true)
+                trySchedule(recursive = true)
             }
         }
     }
