@@ -11,6 +11,10 @@ import kotlin.math.sqrt
 open class SparseVector(
     internal val content: TreeMap<Int, Double> = TreeMap()
 ) {
+    companion object {
+        val EMPTY = SparseVector()
+    }
+    
     /**
      * Gets the value at the specified [index].
      * Returns 0.0 if the value is not present.

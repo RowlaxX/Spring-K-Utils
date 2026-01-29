@@ -12,6 +12,10 @@ import kotlin.math.roundToInt
 open class IntSparseVector(
     internal val content: TreeMap<Int, Int> = TreeMap()
 ) {
+    companion object {
+        val EMPTY = IntSparseVector()
+    }
+
     /**
      * Gets the value at the specified [index].
      * Returns 0 if the value is not present.

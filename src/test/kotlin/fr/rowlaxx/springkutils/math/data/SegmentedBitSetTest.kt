@@ -396,6 +396,12 @@ class SegmentedBitSetTest {
         assertEquals(70, bitset.next(51))
         assertThrows<NoSuchElementException> { bitset.next(81) }
 
+        // nextOrNull
+        assertEquals(10, bitset.nextOrNull(0))
+        assertEquals(10, bitset.nextOrNull(10))
+        assertEquals(40, bitset.nextOrNull(21))
+        assertNull(bitset.nextOrNull(81))
+
         // previous
         assertEquals(80, bitset.previous(100))
         assertEquals(80, bitset.previous(80))
@@ -403,6 +409,12 @@ class SegmentedBitSetTest {
         assertEquals(50, bitset.previous(69))
         assertEquals(20, bitset.previous(39))
         assertThrows<NoSuchElementException> { bitset.previous(9) }
+
+        // previousOrNull
+        assertEquals(80, bitset.previousOrNull(100))
+        assertEquals(80, bitset.previousOrNull(80))
+        assertEquals(20, bitset.previousOrNull(39))
+        assertNull(bitset.previousOrNull(9))
 
         // nextAbsent
         assertEquals(0, bitset.nextAbsent(0))
@@ -413,6 +425,11 @@ class SegmentedBitSetTest {
         assertEquals(51, bitset.nextAbsent(50))
         assertEquals(81, bitset.nextAbsent(80))
 
+        // nextAbsentOrNull
+        assertEquals(0, bitset.nextAbsentOrNull(0))
+        assertEquals(21, bitset.nextAbsentOrNull(15))
+        assertEquals(81, bitset.nextAbsentOrNull(80))
+
         // previousAbsent
         assertEquals(100, bitset.previousAbsent(100))
         assertEquals(81, bitset.previousAbsent(81))
@@ -420,6 +437,26 @@ class SegmentedBitSetTest {
         assertEquals(69, bitset.previousAbsent(80))
         assertEquals(39, bitset.previousAbsent(40))
         assertEquals(9, bitset.previousAbsent(10))
+
+        // previousAbsentOrNull
+        assertEquals(100, bitset.previousAbsentOrNull(100))
+        assertEquals(69, bitset.previousAbsentOrNull(70))
+        assertEquals(9, bitset.previousAbsentOrNull(10))
+    }
+
+    @Test
+    fun testAbsentBoundaryCases() {
+        val bitset = MutableSegmentedBitSet()
+        
+        // Long.MAX_VALUE
+        bitset.addAll(Long.MAX_VALUE - 1..Long.MAX_VALUE)
+        assertNull(bitset.nextAbsentOrNull(Long.MAX_VALUE))
+        assertThrows<NoSuchElementException> { bitset.nextAbsent(Long.MAX_VALUE) }
+        
+        // Long.MIN_VALUE
+        bitset.addAll(Long.MIN_VALUE..Long.MIN_VALUE + 1)
+        assertNull(bitset.previousAbsentOrNull(Long.MIN_VALUE))
+        assertThrows<NoSuchElementException> { bitset.previousAbsent(Long.MIN_VALUE) }
     }
 
     @Test
@@ -565,5 +602,92 @@ class SegmentedBitSetTest {
         // Verify it's actually a SegmentedBitSet (immutable type)
         assertFalse(copy is MutableSegmentedBitSet)
         assertEquals(SegmentedBitSet::class, copy::class)
+    }
+
+    @Test
+    fun testIssueScenario() {
+        val bitset = MutableSegmentedBitSet()
+        // Let's say absent values are ..., 98, 99, 100
+        // If we add nothing, everything is absent.
+        // If input is 100, previous absent should be 100.
+        assertEquals(100, bitset.previousAbsent(100))
+
+        // Let's add 100 to the set. Now 100 is present.
+        bitset.add(100)
+        // Previous absent <= 100 should be 99.
+        assertEquals(99, bitset.previousAbsent(100))
+
+        // Let's add 90..100 to the set.
+        bitset.addAll(90L..100L)
+        // Previous absent <= 100 should be 89.
+        assertEquals(89, bitset.previousAbsent(100))
+
+        // Let's add everything up to 100.
+        bitset.addAll(Long.MIN_VALUE..100L)
+        // Now no absent value <= 100.
+        assertThrows<NoSuchElementException> { bitset.previousAbsent(100) }
+        assertNull(bitset.previousAbsentOrNull(100))
+    }
+
+    @Test
+    fun testPreviousAbsentComprehensive() {
+        val bitset = MutableSegmentedBitSet()
+        // [10, 20], [30, 40]
+        bitset.addAll(10L..20L)
+        bitset.addAll(30L..40L)
+
+        // Before first segment
+        assertEquals(9, bitset.previousAbsent(9))
+        assertEquals(5, bitset.previousAbsent(5))
+
+        // At start of first segment
+        assertEquals(9, bitset.previousAbsent(10))
+
+        // Inside first segment
+        assertEquals(9, bitset.previousAbsent(15))
+
+        // At end of first segment
+        assertEquals(9, bitset.previousAbsent(20))
+
+        // Between segments
+        assertEquals(21, bitset.previousAbsent(21))
+        assertEquals(25, bitset.previousAbsent(25))
+        assertEquals(29, bitset.previousAbsent(29))
+
+        // At start of second segment
+        assertEquals(29, bitset.previousAbsent(30))
+
+        // After segments
+        assertEquals(41, bitset.previousAbsent(41))
+        assertEquals(100, bitset.previousAbsent(100))
+    }
+
+    @Test
+    fun testBoundaryLongMinValue() {
+        val bitset = MutableSegmentedBitSet()
+
+        // Empty set: Long.MIN_VALUE is absent
+        assertEquals(Long.MIN_VALUE, bitset.previousAbsent(Long.MIN_VALUE))
+
+        // Add Long.MIN_VALUE
+        bitset.add(Long.MIN_VALUE)
+        assertThrows<NoSuchElementException> { bitset.previousAbsent(Long.MIN_VALUE) }
+        assertNull(bitset.previousAbsentOrNull(Long.MIN_VALUE))
+
+        bitset.addAll(Long.MIN_VALUE..0L)
+        assertThrows<NoSuchElementException> { bitset.previousAbsent(0) }
+        assertNull(bitset.previousAbsentOrNull(0))
+        assertEquals(1, bitset.previousAbsent(1))
+    }
+
+    @Test
+    fun testBoundaryLongMaxValue() {
+        val bitset = MutableSegmentedBitSet()
+        // Empty set
+        assertEquals(Long.MAX_VALUE, bitset.previousAbsent(Long.MAX_VALUE))
+
+        // Add Long.MAX_VALUE
+        bitset.add(Long.MAX_VALUE)
+        assertEquals(Long.MAX_VALUE - 1, bitset.previousAbsent(Long.MAX_VALUE))
     }
 }

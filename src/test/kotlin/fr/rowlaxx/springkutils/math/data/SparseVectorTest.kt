@@ -7,6 +7,18 @@ import java.util.TreeMap
 class SparseVectorTest {
 
     @Test
+    fun testEmpty() {
+        val empty = SparseVector.EMPTY
+        assertEquals(0, empty.nonZeroCount())
+        assertEquals(-1, empty.firstNonZeroIndex())
+        assertEquals(-1, empty.lastNonZeroIndex())
+        assertEquals(0.0, empty[0])
+        assertEquals(0.0, empty[100])
+        assertEquals(0.0, empty[-100])
+        assertTrue(empty.content.isEmpty())
+    }
+
+    @Test
     fun testGet() {
         val v = MutableSparseVector()
         v[0] = 2.0

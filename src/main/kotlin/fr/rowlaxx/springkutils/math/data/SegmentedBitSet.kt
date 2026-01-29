@@ -175,6 +175,48 @@ open class SegmentedBitSet internal constructor(
     }
     
     /**
+     * Returns the largest number present in this bit set that is less than or equal to [from],
+     * or null if no such number exists.
+     */
+    fun previousOrNull(from: Long): Long? {
+        val entry = content.floorEntry(from)
+        if (entry != null && from <= entry.value) return from
+        return content.lowerEntry(from)?.value
+    }
+    
+    /**
+     * Returns the smallest number present in this bit set that is greater than or equal to [from],
+     * or null if no such number exists.
+     */
+    fun nextOrNull(from: Long): Long? {
+        val entry = content.floorEntry(from)
+        if (entry != null && from <= entry.value) return from
+        return content.ceilingKey(from)
+    }
+    
+    /**
+     * Returns the largest number NOT present in this bit set that is less than or equal to [from],
+     * or null if no such number exists (e.g. if the bit set contains [Long.MIN_VALUE] and [from] is [Long.MIN_VALUE]).
+     */
+    fun previousAbsentOrNull(from: Long): Long? {
+        val entry = content.floorEntry(from)
+        if (entry == null || from > entry.value) return from
+        if (entry.key == Long.MIN_VALUE) return null
+        return entry.key - 1
+    }
+    
+    /**
+     * Returns the smallest number NOT present in this bit set that is greater than or equal to [from],
+     * or null if no such number exists (e.g. if the bit set contains [Long.MAX_VALUE] and [from] is [Long.MAX_VALUE]).
+     */
+    fun nextAbsentOrNull(from: Long): Long? {
+        val entry = content.floorEntry(from)
+        if (entry == null || from > entry.value) return from
+        if (entry.value == Long.MAX_VALUE) return null
+        return entry.value + 1
+    }
+    
+    /**
      * Returns true if there is at least one number present in this bit set that is greater than or equal to [from].
      */
     fun hasNext(from: Long): Boolean {
@@ -216,6 +258,10 @@ open class SegmentedBitSet internal constructor(
      * @throws NoSuchElementException if the bit set is empty.
      */
     fun last(): Long = content.lastEntry()?.value ?: throw NoSuchElementException()
+
+    fun lastOrNull(): Long? = content.lastEntry()?.value
+
+    fun firstOrNull(): Long? = content.firstEntry()?.value
 
     /**
      * Returns the total number of bits set to true.

@@ -7,6 +7,18 @@ import java.util.TreeMap
 class IntSparseVectorTest {
 
     @Test
+    fun testEmpty() {
+        val empty = IntSparseVector.EMPTY
+        assertEquals(0, empty.nonZeroCount())
+        assertEquals(-1, empty.firstNonZeroIndex())
+        assertEquals(-1, empty.lastNonZeroIndex())
+        assertEquals(0, empty[0])
+        assertEquals(0, empty[100])
+        assertEquals(0, empty[-100])
+        assertTrue(empty.content.isEmpty())
+    }
+
+    @Test
     fun testGet() {
         val v = MutableIntSparseVector()
         v[0] = 2
