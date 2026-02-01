@@ -19,6 +19,14 @@ open class SegmentedBitSet internal constructor(
      */
     constructor() : this(TreeMap<Long, Long>())
 
+    companion object {
+        /**
+         * A static element representing an empty SegmentedBitSet.
+         */
+        @JvmField
+        val EMPTY = SegmentedBitSet()
+    }
+
     /**
      * Returns true if this bit set contains the specified number.
      */
@@ -272,6 +280,52 @@ open class SegmentedBitSet internal constructor(
             total += (end - start + 1)
         }
         return total
+    }
+
+    /**
+     * Iterates over each range of present elements in this bit set.
+     *
+     * @param action a function that takes the start and end of each range (inclusive).
+     */
+    fun forEachRange(action: (LongRange) -> Unit) {
+        content.forEach { (start, end) -> action(start..end) }
+    }
+
+    /**
+     * Iterates over each range of absent elements in this bit set within the specified range.
+     *
+     * @param range the range to search for absent elements.
+     * @param action a function that takes the start and end of each absent range (inclusive).
+     */
+    fun forEachAbsentRange(range: LongRange = Long.MIN_VALUE..Long.MAX_VALUE, action: (LongRange) -> Unit) {
+        if (range.isEmpty()) {
+            return
+        }
+        
+        var current = range.first
+
+        while (current <= range.last) {
+            val absentStart = nextAbsentOrNull(current) ?: break
+
+            if (absentStart > range.last) {
+                break
+            }
+
+            val nextPresent = nextOrNull(absentStart)
+            val absentEnd = if (nextPresent == null || nextPresent > range.last) {
+                range.last
+            } else {
+                nextPresent - 1
+            }
+
+            action(absentStart..absentEnd)
+
+            if (absentEnd == Long.MAX_VALUE || absentEnd >= range.last) {
+                break
+            }
+
+            current = absentEnd + 1
+        }
     }
 
     /**

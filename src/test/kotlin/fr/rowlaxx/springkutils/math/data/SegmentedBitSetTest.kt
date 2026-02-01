@@ -690,4 +690,160 @@ class SegmentedBitSetTest {
         bitset.add(Long.MAX_VALUE)
         assertEquals(Long.MAX_VALUE - 1, bitset.previousAbsent(Long.MAX_VALUE))
     }
+
+    @Test
+    fun testEmptyStatic() {
+        assertTrue(SegmentedBitSet.EMPTY.content.isEmpty())
+        assertEquals(0, SegmentedBitSet.EMPTY.size())
+        assertFalse(SegmentedBitSet.EMPTY.contains(0))
+        assertSame(SegmentedBitSet.EMPTY, SegmentedBitSet.EMPTY.immutableView())
+    }
+
+    @Test
+    fun testForEachRange() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..20L)
+        bitset.addAll(30L..40L)
+        bitset.add(50L)
+
+        val ranges = mutableListOf<LongRange>()
+        bitset.forEachRange { ranges.add(it) }
+
+        assertEquals(3, ranges.size)
+        assertEquals(10L..20L, ranges[0])
+        assertEquals(30L..40L, ranges[1])
+        assertEquals(50L..50L, ranges[2])
+    }
+
+    @Test
+    fun testForEachAbsentRange() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..20L)
+        bitset.addAll(30L..40L)
+
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(0L..50L) { absentRanges.add(it) }
+
+        assertEquals(3, absentRanges.size)
+        assertEquals(0L..9L, absentRanges[0])
+        assertEquals(21L..29L, absentRanges[1])
+        assertEquals(41L..50L, absentRanges[2])
+    }
+
+    @Test
+    fun testForEachAbsentRangeEmptySet() {
+        val bitset = SegmentedBitSet.EMPTY
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(10L..20L) { absentRanges.add(it) }
+
+        assertEquals(1, absentRanges.size)
+        assertEquals(10L..20L, absentRanges[0])
+    }
+
+    @Test
+    fun testForEachAbsentRangeFullSet() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(0L..100L)
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(10L..20L) { absentRanges.add(it) }
+
+        assertTrue(absentRanges.isEmpty())
+    }
+
+    @Test
+    fun testForEachAbsentRangeBoundaries() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(1L..Long.MAX_VALUE - 1)
+        
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange { absentRanges.add(it) }
+        
+        assertEquals(2, absentRanges.size)
+        assertEquals(Long.MIN_VALUE..0L, absentRanges[0])
+        assertEquals(Long.MAX_VALUE..Long.MAX_VALUE, absentRanges[1])
+    }
+
+    @Test
+    fun testForEachAbsentRangeStartingAtBoundary() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(Long.MIN_VALUE)
+        bitset.add(Long.MAX_VALUE)
+
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange { absentRanges.add(it) }
+
+        assertEquals(1, absentRanges.size)
+        assertEquals(Long.MIN_VALUE + 1..Long.MAX_VALUE - 1, absentRanges[0])
+    }
+
+    @Test
+    fun testForEachAbsentRangeWithMultipleSegments() {
+        val bitset = MutableSegmentedBitSet()
+        for (i in 0..10 step 2) {
+            bitset.add(i.toLong())
+        }
+        // Present: 0, 2, 4, 6, 8, 10
+        // Absent in 0..10: 1, 3, 5, 7, 9
+
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(0L..10L) { absentRanges.add(it) }
+
+        assertEquals(5, absentRanges.size)
+        assertEquals(1L..1L, absentRanges[0])
+        assertEquals(3L..3L, absentRanges[1])
+        assertEquals(5L..5L, absentRanges[2])
+        assertEquals(7L..7L, absentRanges[3])
+        assertEquals(9L..9L, absentRanges[4])
+    }
+
+    @Test
+    fun testForEachAbsentRangePartialOverlap() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..20L)
+        bitset.addAll(30L..40L)
+
+        // Case 1: Range starts inside a segment
+        val absentRanges1 = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(15L..35L) { absentRanges1.add(it) }
+        assertEquals(1, absentRanges1.size)
+        assertEquals(21L..29L, absentRanges1[0])
+
+        // Case 2: Range ends inside a segment
+        val absentRanges2 = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(5L..15L) { absentRanges2.add(it) }
+        assertEquals(1, absentRanges2.size)
+        assertEquals(5L..9L, absentRanges2[0])
+
+        // Case 3: Range strictly between segments
+        val absentRanges3 = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(22L..28L) { absentRanges3.add(it) }
+        assertEquals(1, absentRanges3.size)
+        assertEquals(22L..28L, absentRanges3[0])
+    }
+
+    @Test
+    fun testForEachAbsentRangeVerySmall() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(10L)
+        
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(10L..10L) { absentRanges.add(it) }
+        assertTrue(absentRanges.isEmpty())
+        
+        bitset.forEachAbsentRange(11L..11L) { absentRanges.add(it) }
+        assertEquals(1, absentRanges.size)
+        assertEquals(11L..11L, absentRanges[0])
+    }
+
+    @Test
+    fun testForEachAbsentRangeLargeGap() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(Long.MIN_VALUE)
+        bitset.add(Long.MAX_VALUE)
+        
+        val absentRanges = mutableListOf<LongRange>()
+        bitset.forEachAbsentRange(Long.MIN_VALUE..Long.MAX_VALUE) { absentRanges.add(it) }
+        assertEquals(1, absentRanges.size)
+        assertEquals(Long.MIN_VALUE + 1..Long.MAX_VALUE - 1, absentRanges[0])
+    }
 }
