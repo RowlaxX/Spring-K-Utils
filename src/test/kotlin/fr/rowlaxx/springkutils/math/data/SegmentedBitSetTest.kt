@@ -3,6 +3,7 @@ package fr.rowlaxx.springkutils.math.data
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.util.*
 
 class SegmentedBitSetTest {
 
@@ -211,6 +212,15 @@ class SegmentedBitSetTest {
     }
 
     @Test
+    fun testOpenEndedContainsAll() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..15L)
+
+        assertTrue(bitset.containsAll(10L..15L))
+        assertTrue(bitset.containsAll(10L..<16L))
+    }
+
+    @Test
     fun testSetAll() {
         val bitset = MutableSegmentedBitSet()
         
@@ -354,6 +364,50 @@ class SegmentedBitSetTest {
         assertEquals(0, bitset.previousAbsent(0))
         assertFalse(bitset.contains(0))
         assertTrue(bitset.containsAll(LongRange.EMPTY))
+        assertFalse(bitset.containsAny(0L..100L))
+        assertFalse(bitset.containsAny(LongRange.EMPTY))
+    }
+
+    @Test
+    fun testContainsAny() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(10L..20L)
+        bitset.addAll(40L..50L)
+
+        // Fully inside a segment
+        assertTrue(bitset.containsAny(12L..15L))
+        // Overlap at the start of a segment
+        assertTrue(bitset.containsAny(5L..12L))
+        // Overlap at the end of a segment
+        assertTrue(bitset.containsAny(18L..25L))
+        // Spanning multiple segments
+        assertTrue(bitset.containsAny(15L..45L))
+        // Exactly one segment
+        assertTrue(bitset.containsAny(10L..20L))
+        // Touches one segment at the boundary
+        assertTrue(bitset.containsAny(20L..25L))
+        assertTrue(bitset.containsAny(5L..10L))
+
+        // In the gap between segments
+        assertFalse(bitset.containsAny(21L..39L))
+        // Before all segments
+        assertFalse(bitset.containsAny(0L..9L))
+        // After all segments
+        assertFalse(bitset.containsAny(51L..100L))
+
+        // Empty range
+        assertFalse(bitset.containsAny(LongRange.EMPTY))
+    }
+
+    @Test
+    fun testContainsAnyWithSingleBit() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(100L)
+
+        assertTrue(bitset.containsAny(100L..100L))
+        assertFalse(bitset.containsAny(99L..99L))
+        assertFalse(bitset.containsAny(101L..101L))
+        assertTrue(bitset.containsAny(99L..101L))
     }
 
     @Test
@@ -845,5 +899,23 @@ class SegmentedBitSetTest {
         bitset.forEachAbsentRange(Long.MIN_VALUE..Long.MAX_VALUE) { absentRanges.add(it) }
         assertEquals(1, absentRanges.size)
         assertEquals(Long.MIN_VALUE + 1..Long.MAX_VALUE - 1, absentRanges[0])
+    }
+
+    @Test
+    fun testContainsAllBugReproduction() {
+        val content = TreeMap<Long, Long>()
+        content[0L] = 5L
+        content[6L] = 10L
+        val bitset = SegmentedBitSet(content)
+
+        assertTrue(bitset.containsAll(0L..10L), "Should contain 0..10 even if split into [0, 5] and [6, 10]")
+        assertFalse(bitset.containsAll(0L..11L))
+        assertFalse(bitset.containsAll(-1L..10L))
+        
+        content[12L] = 15L
+        val bitset2 = SegmentedBitSet(content)
+        assertFalse(bitset2.containsAll(0L..15L), "Should be false because of gap at 11")
+        assertTrue(bitset2.containsAll(0L..10L))
+        assertTrue(bitset2.containsAll(12L..15L))
     }
 }

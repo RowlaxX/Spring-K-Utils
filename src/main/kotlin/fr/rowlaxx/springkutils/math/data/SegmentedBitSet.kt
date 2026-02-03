@@ -40,8 +40,25 @@ open class SegmentedBitSet internal constructor(
      */
     fun containsAll(range: LongRange): Boolean {
         if (range.isEmpty()) return true
-        val entry = content.floorEntry(range.first) ?: return false
-        return range.last <= entry.value
+        var current = range.first
+        while (current <= range.last) {
+            val entry = content.floorEntry(current)
+            if (entry == null || entry.value < current) return false
+            if (entry.value >= range.last) return true
+            current = entry.value + 1
+        }
+        return true
+    }
+
+    /**
+     * Returns true if this bit set contains any number in the specified range.
+     */
+    fun containsAny(range: LongRange): Boolean {
+        if (range.isEmpty()) return false
+        val entry = content.floorEntry(range.first)
+        if (entry != null && range.first <= entry.value) return true
+        val nextEntry = content.ceilingEntry(range.first)
+        return nextEntry != null && nextEntry.key <= range.last
     }
 
     /**
