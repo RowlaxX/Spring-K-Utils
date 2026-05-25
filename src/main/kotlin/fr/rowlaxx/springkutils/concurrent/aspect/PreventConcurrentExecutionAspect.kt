@@ -7,17 +7,17 @@ import org.springframework.stereotype.Component
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Aspect that handles the [fr.rowlaxx.springkutils.concurrent.annotation.PreventMultipleExecution] annotation.
- * It ensures that a method annotated with [fr.rowlaxx.springkutils.concurrent.annotation.PreventMultipleExecution]
+ * Aspect that handles the [fr.rowlaxx.springkutils.concurrent.annotation.PreventConcurrentExecution] annotation.
+ * It ensures that a method annotated with [fr.rowlaxx.springkutils.concurrent.annotation.PreventConcurrentExecution]
  * is not executed if it is already running.
  */
 @Aspect
 @Component
-class PreventMultipleExecutionAspect {
+class PreventConcurrentExecutionAspect {
     private val executingMethods = ConcurrentHashMap.newKeySet<String>()
 
-    @Around("@annotation(fr.rowlaxx.springkutils.concurrent.annotation.PreventMultipleExecution)")
-    fun preventMultipleExecution(joinPoint: ProceedingJoinPoint): Any? {
+    @Around("@annotation(fr.rowlaxx.springkutils.concurrent.annotation.PreventConcurrentExecution)")
+    fun preventConcurrentExecution(joinPoint: ProceedingJoinPoint): Any? {
         val methodSignature = joinPoint.signature.toLongString()
         val target = joinPoint.target
         val methodKey = "${target.javaClass.name}#$methodSignature"

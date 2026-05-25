@@ -225,6 +225,15 @@ open class SparseVector(
      */
     infix fun multiplied(value: Double): SparseVector {
         if (value == 0.0) return SparseVector()
+        if (value == 1.0) {
+            if (this is MutableSparseVector) {
+                return immutableCopy()
+            }
+            else {
+                return this
+            }
+        }
+
         val result = TreeMap<Int, Double>()
         for ((index, v) in content) {
             val newValue = v * value

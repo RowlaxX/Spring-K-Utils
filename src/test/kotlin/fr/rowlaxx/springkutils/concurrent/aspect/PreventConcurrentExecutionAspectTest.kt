@@ -1,6 +1,6 @@
 package fr.rowlaxx.springkutils.concurrent.aspect
 
-import fr.rowlaxx.springkutils.concurrent.annotation.PreventMultipleExecution
+import fr.rowlaxx.springkutils.concurrent.annotation.PreventConcurrentExecution
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -13,8 +13,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
-@SpringBootTest(classes = [PreventMultipleExecutionAspectTest.TestConfig::class])
-class PreventMultipleExecutionAspectTest {
+@SpringBootTest(classes = [PreventConcurrentExecutionAspectTest.TestConfig::class])
+class PreventConcurrentExecutionAspectTest {
 
     @Autowired
     lateinit var testService: TestService
@@ -45,7 +45,7 @@ class PreventMultipleExecutionAspectTest {
     @EnableAspectJAutoProxy
     class TestConfig {
         @Bean
-        fun preventMultipleExecutionAspect() = PreventMultipleExecutionAspect()
+        fun preventMultipleExecutionAspect() = PreventConcurrentExecutionAspect()
 
         @Bean
         fun testService() = TestService()
@@ -55,7 +55,7 @@ class PreventMultipleExecutionAspectTest {
     class TestService {
         val executionCount = AtomicInteger(0)
 
-        @PreventMultipleExecution
+        @PreventConcurrentExecution
         fun longRunningMethod(latch: CountDownLatch) {
             executionCount.incrementAndGet()
             latch.countDown()
