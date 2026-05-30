@@ -1,19 +1,21 @@
-package fr.rowlaxx.springkutils.io.service
+package fr.rowlaxx.springkutils.io.conf
 
 import fr.rowlaxx.springkutils.concurrent.config.ThreadConfiguration
-import org.springframework.stereotype.Service
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import java.net.http.HttpClient
 import java.time.Duration
 
-@Service
-class HttpClientService(
+@Configuration
+class HttpClientConfiguration(
     private val threadConfiguration: ThreadConfiguration
 ) {
-
-    val client = HttpClient.newBuilder()
+    
+    @Bean
+    fun httpClient(): HttpClient = HttpClient.newBuilder()
         .version(HttpClient.Version.HTTP_2)
         .connectTimeout(Duration.ofSeconds(10))
         .executor(threadConfiguration.ioExec)
         .build()
-
+    
 }
