@@ -6,7 +6,6 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.TaskDecorator
-import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import kotlin.math.max
@@ -14,7 +13,7 @@ import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
 @Configuration
-class GlobalExecutorsConfiguration : AsyncConfigurer {
+class GlobalExecutorsConfiguration {
     val ioParallelism = max(1, min(4, Runtime.getRuntime().availableProcessors() / 4))
 
     private val taskDecorator: TaskDecorator = TaskDecorator {
@@ -73,7 +72,5 @@ class GlobalExecutorsConfiguration : AsyncConfigurer {
 
     @Bean
     fun configureTasks() = taskScheduler
-
-    override fun getAsyncExecutor() = asyncExec
 
 }
