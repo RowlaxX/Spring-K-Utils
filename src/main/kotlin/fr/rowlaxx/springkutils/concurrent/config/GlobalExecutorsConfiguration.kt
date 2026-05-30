@@ -14,7 +14,7 @@ import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
 @Configuration
-class ThreadConfiguration : AsyncConfigurer {
+class GlobalExecutorsConfiguration : AsyncConfigurer {
     val ioParallelism = max(1, min(4, Runtime.getRuntime().availableProcessors() / 4))
 
     private val taskDecorator: TaskDecorator = TaskDecorator {
