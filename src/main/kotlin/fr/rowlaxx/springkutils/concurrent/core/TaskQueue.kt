@@ -17,22 +17,27 @@ class TaskQueue(
 
     private val isPaused = MutableStateFlow(paused)
 
-    fun enqueue(task: suspend () -> Unit) {
+    fun <T> enqueue(task: suspend () -> T): Deferred<T> {
+        val deferred = CompletableDeferred<T>()
+
         scope.launch { queueMutex.withLock {
             val previous = lastTask
 
             lastTask = scope.launch {
                 previous?.join()
-
                 isPaused.first { !it }
 
-                try {
-                    task()
-                } catch (e: Exception) {
-                    log.error("An error has occurred in TaskQueue", e)
-                }
+                runCatching { task() }
+                    .onFailure { log.error("An error has occurred in TaskQueue", it) }
+                    .let { deferred.completeWith(it) }
             }
         }}
+
+        return deferred
+    }
+
+    fun submit(task: suspend () -> Unit): Job {
+        return enqueue { task() }
     }
 
     fun pause() { isPaused.value = true }
