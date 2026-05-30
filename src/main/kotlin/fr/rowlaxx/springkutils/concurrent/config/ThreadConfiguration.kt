@@ -2,13 +2,12 @@ package fr.rowlaxx.springkutils.concurrent.config
 
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import kotlinx.coroutines.asCoroutineDispatcher
-import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.task.TaskDecorator
 import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import java.lang.reflect.Method
 import kotlin.math.max
 import kotlin.math.min
 
@@ -16,12 +15,23 @@ import kotlin.math.min
 class ThreadConfiguration : AsyncConfigurer {
     val ioParallelism = max(1, min(4, Runtime.getRuntime().availableProcessors() / 4))
 
+    private val taskDecorator: TaskDecorator = TaskDecorator {
+        Runnable {
+            try {
+                it.run()
+            } catch (e: Exception) {
+                log.error("Unexpected error occurred", e)
+            }
+        }
+    }
+
     val asyncExecutor = ThreadPoolTaskExecutor().also {
         val proc = Runtime.getRuntime().availableProcessors()
 
         it.corePoolSize = proc - 1 - ioParallelism
         it.maxPoolSize = proc - 1 - ioParallelism
         it.setThreadNamePrefix("Core ")
+        it.setTaskDecorator(taskDecorator)
         it.initialize()
     }
 
@@ -35,26 +45,18 @@ class ThreadConfiguration : AsyncConfigurer {
     val ioExecutor = ThreadPoolTaskExecutor().also {
         it.corePoolSize = ioParallelism
         it.maxPoolSize = ioParallelism
-        it.setThreadNamePrefix("Core IO ")
+        it.setTaskDecorator(taskDecorator)
+        it.setThreadNamePrefix("HTTP/WS ")
         it.initialize()
     }
 
     val ioDispatcher = ioExecutor.asCoroutineDispatcher()
 
+
+
     @Bean
     fun configureTasks() = taskScheduler
 
     override fun getAsyncExecutor() = asyncExecutor
-
-    override fun getAsyncUncaughtExceptionHandler(): AsyncUncaughtExceptionHandler? {
-        return CustomAsyncExceptionHandler()
-    }
-
-    class CustomAsyncExceptionHandler : AsyncUncaughtExceptionHandler {
-
-        override fun handleUncaughtException(throwable: Throwable, method: Method, vararg params: Any?) {
-            log.error("Unexpected error occurred in method: {}", method.name, throwable)
-        }
-    }
 
 }
