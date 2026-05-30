@@ -11,6 +11,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.system.measureTimeMillis
 
 @Configuration
 class ThreadConfiguration : AsyncConfigurer {
@@ -22,6 +23,18 @@ class ThreadConfiguration : AsyncConfigurer {
                 it.run()
             } catch (e: Exception) {
                 log.error("Unexpected error occurred", e)
+            }
+        }
+    }
+
+    private val performanceDecorator: TaskDecorator = TaskDecorator {
+        Runnable {
+            val millis = measureTimeMillis {
+                taskDecorator.decorate(it).run()
+            }
+
+            if (millis > 20) {
+                log.warn("Scheduler took more than 20 millis for a function.")
             }
         }
     }
@@ -38,7 +51,7 @@ class ThreadConfiguration : AsyncConfigurer {
 
     val taskScheduler = ThreadPoolTaskScheduler().also {
         it.poolSize = 1
-        it.setErrorHandler { error -> log.error("Scheduler error", error) }
+        it.setTaskDecorator(performanceDecorator)
         it.setThreadFactory { task -> Thread(task, "Scheduler") }
         it.initialize()
     }
