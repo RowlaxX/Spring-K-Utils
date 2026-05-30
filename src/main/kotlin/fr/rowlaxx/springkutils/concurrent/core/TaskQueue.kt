@@ -1,6 +1,9 @@
 package fr.rowlaxx.springkutils.concurrent.core
 
+import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -10,41 +13,30 @@ class TaskQueue(
 ) {
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
     private val queueMutex = Mutex()
-    private val pauseMutex = Mutex(locked = paused)
     private var lastTask: Job? = null
 
-    var isPaused: Boolean = paused
-        private set
+    private val isPaused = MutableStateFlow(paused)
 
     fun enqueue(task: suspend () -> Unit) {
         scope.launch { queueMutex.withLock {
-            lastTask = scope.launch {
-                lastTask?.join()
+            val previous = lastTask
 
-                pauseMutex.withLock {
+            lastTask = scope.launch {
+                previous?.join()
+
+                isPaused.first { !it }
+
+                try {
                     task()
+                } catch (e: Exception) {
+                    log.error("An error has occurred in TaskQueue", e)
                 }
             }
         }}
     }
 
-    fun pause() {
-        scope.launch { queueMutex.withLock {
-            if (!isPaused) {
-                pauseMutex.lock() // Lock the gate
-                isPaused = true
-            }
-        } }
-    }
-
-    fun resume() {
-        scope.launch { queueMutex.withLock {
-            if (isPaused) {
-                pauseMutex.unlock() // Open the gate
-                isPaused = false
-            }
-        } }
-    }
+    fun pause() { isPaused.value = true }
+    fun resume() { isPaused.value = false }
 
     fun close() {
         scope.cancel()
