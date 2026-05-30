@@ -1,6 +1,7 @@
 package fr.rowlaxx.springkutils.concurrent.config
 
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
+import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.asCoroutineDispatcher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -52,7 +53,10 @@ class ThreadConfiguration : AsyncConfigurer {
 
     val ioDispatcher = ioExecutor.asCoroutineDispatcher()
 
-
+    @PreDestroy
+    fun destroy() {
+        ioExecutor.shutdown()
+    }
 
     @Bean
     fun configureTasks() = taskScheduler
