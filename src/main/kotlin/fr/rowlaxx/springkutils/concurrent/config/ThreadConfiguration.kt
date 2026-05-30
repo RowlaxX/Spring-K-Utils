@@ -26,7 +26,7 @@ class ThreadConfiguration : AsyncConfigurer {
         }
     }
 
-    val asyncExecutor = ThreadPoolTaskExecutor().also {
+    val asyncExec = ThreadPoolTaskExecutor().also {
         val proc = Runtime.getRuntime().availableProcessors()
 
         it.corePoolSize = proc - 1 - ioParallelism
@@ -43,7 +43,7 @@ class ThreadConfiguration : AsyncConfigurer {
         it.initialize()
     }
 
-    val ioExecutor = ThreadPoolTaskExecutor().also {
+    val ioExec = ThreadPoolTaskExecutor().also {
         it.corePoolSize = ioParallelism
         it.maxPoolSize = ioParallelism
         it.setTaskDecorator(taskDecorator)
@@ -51,16 +51,16 @@ class ThreadConfiguration : AsyncConfigurer {
         it.initialize()
     }
 
-    val ioDispatcher = ioExecutor.asCoroutineDispatcher()
+    val ioDispatcher = ioExec.asCoroutineDispatcher()
 
     @PreDestroy
     fun destroy() {
-        ioExecutor.shutdown()
+        ioExec.shutdown()
     }
 
     @Bean
     fun configureTasks() = taskScheduler
 
-    override fun getAsyncExecutor() = asyncExecutor
+    override fun getAsyncExecutor() = asyncExec
 
 }

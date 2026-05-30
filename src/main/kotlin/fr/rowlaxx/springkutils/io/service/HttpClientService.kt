@@ -13,7 +13,7 @@ class HttpClientService(
     val client = HttpClient.newBuilder()
         .version(HttpClient.Version.HTTP_2)
         .connectTimeout(Duration.ofSeconds(10))
-        .executor(threadConfiguration.ioExecutor)
+        .executor(threadConfiguration.ioExec)
         .build()
 
 }
