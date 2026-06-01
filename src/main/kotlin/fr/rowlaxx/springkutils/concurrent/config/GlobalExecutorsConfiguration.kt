@@ -91,6 +91,7 @@ class GlobalExecutorsConfiguration {
 
     @PreDestroy
     fun destroy() {
+        log.info("Closing threads")
         ioPool.shutdown()
         asyncPool.shutdown()
         taskScheduler.shutdown()
