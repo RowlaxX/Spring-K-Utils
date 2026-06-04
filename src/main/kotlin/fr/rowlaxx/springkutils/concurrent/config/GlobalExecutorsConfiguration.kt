@@ -39,8 +39,8 @@ class GlobalExecutorsConfiguration {
                 taskDecorator.decorate(it).run()
             }
 
-            if (millis > 20) {
-                log.warn("Scheduler took more than 20 millis for a function.")
+            if (millis > 50) {
+                log.warn("Scheduler took more than 50 millis for a function.")
             }
         }
     }
@@ -56,14 +56,14 @@ class GlobalExecutorsConfiguration {
         }
     }
 
-    private val asyncPool = ForkJoinPool(
+    val asyncPool = ForkJoinPool(
         max(1, Runtime.getRuntime().availableProcessors() - 1 - ioParallelism),
         NamedForkJoinThreadFactory("Core "),
         globalExceptionHandler, // 3. (Optional) Also set as the pool's default handler
         true
     )
 
-    private val ioPool = ForkJoinPool(
+    val ioPool = ForkJoinPool(
         ioParallelism,
         NamedForkJoinThreadFactory("HTTP/WS "),
         globalExceptionHandler, // 3. (Optional) Also set as the pool's default handler
