@@ -39,8 +39,8 @@ class GlobalExecutorsConfiguration {
                 taskDecorator.decorate(it).run()
             }
 
-            if (millis > 50) {
-                log.warn("Scheduler took more than 50 millis for a function.")
+            if (millis > 250) {
+                log.warn("Scheduler took {} millis for a function.", millis)
             }
         }
     }
