@@ -88,6 +88,7 @@ class GlobalExecutorsConfiguration {
     }
 
     val ioDispatcher = ioExec.asCoroutineDispatcher()
+    val asyncDispatcher = asyncExec.asCoroutineDispatcher()
 
     @PreDestroy
     fun destroy() {
