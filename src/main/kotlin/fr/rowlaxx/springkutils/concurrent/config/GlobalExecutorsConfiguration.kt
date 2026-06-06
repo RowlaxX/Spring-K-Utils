@@ -13,7 +13,6 @@ import java.util.concurrent.ForkJoinWorkerThread
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.system.measureTimeMillis
 
 @Configuration
 class GlobalExecutorsConfiguration {
@@ -33,15 +32,9 @@ class GlobalExecutorsConfiguration {
         }
     }
 
-    private val performanceDecorator: TaskDecorator = TaskDecorator {
+    private val schedulerDecorator: TaskDecorator = TaskDecorator {
         Runnable {
-            val millis = measureTimeMillis {
-                taskDecorator.decorate(it).run()
-            }
-
-            if (millis > 250) {
-                log.warn("Scheduler took {} millis for a function.", millis)
-            }
+            asyncExec.submit(taskDecorator.decorate(it))
         }
     }
 
@@ -78,9 +71,9 @@ class GlobalExecutorsConfiguration {
         it.setTaskDecorator(taskDecorator)
     }
 
-    val taskScheduler = ThreadPoolTaskScheduler().also { it ->
+    val taskScheduler = ThreadPoolTaskScheduler().also {
         it.poolSize = 1
-        it.setTaskDecorator(performanceDecorator)
+        it.setTaskDecorator(schedulerDecorator)
         it.setThreadFactory { task -> Thread(task, "Scheduler").also { t ->
             t.uncaughtExceptionHandler = globalExceptionHandler
         }}
