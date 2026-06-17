@@ -3,6 +3,7 @@ package fr.rowlaxx.springkutils.concurrent.core
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -12,8 +13,8 @@ class TaskQueue(
     paused: Boolean = false
 ) {
     private class TaskHolder<T>(
-        val task: suspend () -> T,
-        val deferred: CompletableDeferred<T>
+        @JvmField val task: suspend () -> T,
+        @JvmField val deferred: CompletableDeferred<T>
     )
 
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
@@ -21,13 +22,16 @@ class TaskQueue(
 
     private val isPaused = MutableStateFlow(paused)
     private val isClosed = MutableStateFlow(false)
+    private val resumeGate: Flow<Boolean> = combine(isPaused, isClosed) { paused, closed -> !paused || closed }
 
     private val loop: Job
 
     init {
         loop = scope.launch {
             for (holder in channel) {
-                combine(isPaused, isClosed) { b1, b2 -> !b1 || b2 }.first { it }
+                if (isPaused.value && !isClosed.value) {
+                    resumeGate.first { it }
+                }
 
                 if (isClosed.value && isPaused.value) {
                     holder.deferred.completeExceptionally(CancellationException("TaskQueue closed while paused. Task aborted."))
@@ -35,20 +39,14 @@ class TaskQueue(
                 }
 
                 if (!holder.deferred.isCancelled) {
-                    run(holder)
+                    @Suppress("UNCHECKED_CAST")
+                    val typed = holder as TaskHolder<Any?>
+                    runCatching { typed.task() }
+                        .onFailure { log.error("An error has occurred in TaskQueue", it) }
+                        .let { typed.deferred.completeWith(it) }
                 }
             }
         }
-    }
-
-    private suspend fun <T> run(holder: TaskHolder<T>) {
-        runCatching { holder.task() }
-            .onFailure {
-                if (it !is CancellationException) {
-                    log.error("An error has occurred in TaskQueue", it)
-                }
-            }
-            .let { holder.deferred.completeWith(it) }
     }
 
     fun <T> enqueue(task: suspend () -> T): Deferred<T> {
@@ -69,7 +67,9 @@ class TaskQueue(
     }
 
     fun submit(task: suspend () -> Unit): Job {
-        return enqueue { task() }
+        // Pass the task straight through; wrapping it in `{ task() }` allocated an extra
+        // lambda per submit. `Deferred<Unit>` is a `Job`, so the contract is unchanged.
+        return enqueue(task)
     }
 
     fun pause() { isPaused.value = true }
