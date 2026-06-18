@@ -170,33 +170,46 @@ class FastEventPublisher(
         val declaringClass = method.declaringClass
         val privateLookup = MethodHandles.privateLookupIn(declaringClass, lookup)
         val handle = privateLookup.unreflect(method)
-        val eventType = method.parameterTypes[0]
-        val factory = LambdaMetafactory.metafactory(
-            privateLookup,
-            "accept",
-            MethodType.methodType(Consumer::class.java, declaringClass),
-            MethodType.methodType(Void.TYPE, Any::class.java),
-            handle,
-            MethodType.methodType(Void.TYPE, eventType),
-        )
-        @Suppress("UNCHECKED_CAST")
-        return factory.target.invokeWithArguments(target) as Consumer<Any>
+        // Fast path: a LambdaMetafactory-generated, JIT-inlinable Consumer. It needs a full-privilege
+        // caller, which `privateLookupIn` cannot grant when the listener lives in a different
+        // module/classloader than this publisher (e.g. under spring-boot-devtools' restart loader):
+        // the lookup is "teleported" and LambdaMetafactory rejects it ("Invalid caller: ..."). The
+        // bound-MethodHandle fallback is equally allocation-free and works across modules.
+        if (privateLookup.hasFullPrivilegeAccess()) {
+            val eventType = method.parameterTypes[0]
+            val factory = LambdaMetafactory.metafactory(
+                privateLookup,
+                "accept",
+                MethodType.methodType(Consumer::class.java, declaringClass),
+                MethodType.methodType(Void.TYPE, Any::class.java),
+                handle,
+                MethodType.methodType(Void.TYPE, eventType),
+            )
+            @Suppress("UNCHECKED_CAST")
+            return factory.target.invokeWithArguments(target) as Consumer<Any>
+        }
+        val bound = handle.bindTo(target).asType(MethodType.methodType(Void.TYPE, Any::class.java))
+        return Consumer { bound.invoke(it) }
     }
 
     private fun createNoArgConsumer(target: Any, method: Method, lookup: MethodHandles.Lookup): Consumer<Any> {
         val declaringClass = method.declaringClass
         val privateLookup = MethodHandles.privateLookupIn(declaringClass, lookup)
         val handle = privateLookup.unreflect(method)
-        val factory = LambdaMetafactory.metafactory(
-            privateLookup,
-            "run",
-            MethodType.methodType(Runnable::class.java, declaringClass),
-            MethodType.methodType(Void.TYPE),
-            handle,
-            MethodType.methodType(Void.TYPE),
-        )
-        val runnable = factory.target.invokeWithArguments(target) as Runnable
-        return Consumer { runnable.run() }
+        if (privateLookup.hasFullPrivilegeAccess()) {
+            val factory = LambdaMetafactory.metafactory(
+                privateLookup,
+                "run",
+                MethodType.methodType(Runnable::class.java, declaringClass),
+                MethodType.methodType(Void.TYPE),
+                handle,
+                MethodType.methodType(Void.TYPE),
+            )
+            val runnable = factory.target.invokeWithArguments(target) as Runnable
+            return Consumer { runnable.run() }
+        }
+        val bound = handle.bindTo(target)
+        return Consumer { bound.invoke() }
     }
 
     private companion object {
