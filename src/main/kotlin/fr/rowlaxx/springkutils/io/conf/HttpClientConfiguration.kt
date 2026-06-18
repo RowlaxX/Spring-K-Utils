@@ -31,9 +31,9 @@ class HttpClientConfiguration(
 ) {
 
     @Bean(destroyMethod = "close")
-    fun httpClient(ioEventLoopGroup: EventLoopGroup): AsyncHttpClient = Dsl.asyncHttpClient(
+    fun httpClient(): AsyncHttpClient = Dsl.asyncHttpClient(
         DefaultAsyncHttpClientConfig.Builder()
-            .setEventLoopGroup(ioEventLoopGroup)
+            .setEventLoopGroup(thread.ioEventLoopGroup)
             .setConnectTimeout(Duration.ofSeconds(15))
             .setRequestTimeout(Duration.ofSeconds(15))
             .setReadTimeout(Duration.ofSeconds(15))
