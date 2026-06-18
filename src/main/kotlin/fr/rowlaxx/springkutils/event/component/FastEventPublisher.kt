@@ -1,6 +1,6 @@
 package fr.rowlaxx.springkutils.event.component
 
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import org.springframework.aop.framework.AopProxyUtils
@@ -48,7 +48,7 @@ import java.util.function.Consumer
 @Primary
 class FastEventPublisher(
     private val applicationContext: ApplicationContext,
-    executors: GlobalExecutorsConfiguration,
+    executors: GlobalThreadConfiguration,
 ) : ApplicationEventPublisher, SmartInitializingSingleton {
 
     private val asyncPool: ForkJoinPool = executors.asyncPool
@@ -170,11 +170,7 @@ class FastEventPublisher(
         val declaringClass = method.declaringClass
         val privateLookup = MethodHandles.privateLookupIn(declaringClass, lookup)
         val handle = privateLookup.unreflect(method)
-        // Fast path: a LambdaMetafactory-generated, JIT-inlinable Consumer. It needs a full-privilege
-        // caller, which `privateLookupIn` cannot grant when the listener lives in a different
-        // module/classloader than this publisher (e.g. under spring-boot-devtools' restart loader):
-        // the lookup is "teleported" and LambdaMetafactory rejects it ("Invalid caller: ..."). The
-        // bound-MethodHandle fallback is equally allocation-free and works across modules.
+
         if (privateLookup.hasFullPrivilegeAccess()) {
             val eventType = method.parameterTypes[0]
             val factory = LambdaMetafactory.metafactory(

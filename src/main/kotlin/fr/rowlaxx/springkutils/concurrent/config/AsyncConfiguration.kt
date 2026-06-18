@@ -6,7 +6,7 @@ import java.util.concurrent.Executor
 
 @Configuration
 class AsyncConfiguration(
-    private val globalExecutors: GlobalExecutorsConfiguration,
+    private val globalExecutors: GlobalThreadConfiguration,
 ) : AsyncConfigurer {
 
     override fun getAsyncExecutor(): Executor {

@@ -1,7 +1,7 @@
 package fr.rowlaxx.springkutils.event
 
 import com.sun.management.ThreadMXBean
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.event.component.FastEventPublisher
 import org.aspectj.lang.ProceedingJoinPoint
@@ -84,7 +84,7 @@ class FastEventPublisherProxyTest {
         ctx = AnnotationConfigApplicationContext().apply {
             register(
                 ProxyTestConfig::class.java,
-                GlobalExecutorsConfiguration::class.java,
+                GlobalThreadConfiguration::class.java,
                 FastEventPublisher::class.java,
                 GuardCountingAspect::class.java,
                 ProxiedBlockingListener::class.java,

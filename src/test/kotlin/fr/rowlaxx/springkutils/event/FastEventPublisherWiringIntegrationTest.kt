@@ -3,7 +3,7 @@ package fr.rowlaxx.springkutils.event
 import fr.rowlaxx.springkutils.concurrent.annotation.PreventConcurrentExecution
 import fr.rowlaxx.springkutils.concurrent.aspect.PreventConcurrentExecutionAspect
 import fr.rowlaxx.springkutils.concurrent.config.AsyncConfiguration
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.event.component.FastEventPublisher
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -88,7 +88,7 @@ open class ItAsyncBean(private val recorder: ItRecorder) {
 /**
  * Integration test that wires [FastEventPublisher] together with the **real** Spring-K-Utils
  * concurrency/async infrastructure — the actual `@Component @Primary` publisher, the real
- * [GlobalExecutorsConfiguration] pools, [AsyncConfiguration]'s `AsyncConfigurer`, `@EnableAsync`, and
+ * [GlobalThreadConfiguration] pools, [AsyncConfiguration]'s `AsyncConfigurer`, `@EnableAsync`, and
  * the real [PreventConcurrentExecutionAspect] — by importing the production classes (rather than the
  * library's broad `@ComponentScan`, which would also slurp sibling test fixtures).
  */
@@ -147,7 +147,7 @@ class FastEventPublisherWiringIntegrationTest {
     @EnableScheduling
     @EnableAspectJAutoProxy
     @Import(
-        GlobalExecutorsConfiguration::class,
+        GlobalThreadConfiguration::class,
         AsyncConfiguration::class,
         FastEventPublisher::class,
         PreventConcurrentExecutionAspect::class,

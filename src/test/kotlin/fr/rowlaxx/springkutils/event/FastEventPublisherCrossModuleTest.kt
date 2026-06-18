@@ -1,6 +1,6 @@
 package fr.rowlaxx.springkutils.event
 
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.event.component.FastEventPublisher
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -72,7 +72,7 @@ class FastEventPublisherCrossModuleTest {
         )
 
         AnnotationConfigApplicationContext().use { ctx ->
-            ctx.register(GlobalExecutorsConfiguration::class.java, FastEventPublisher::class.java)
+            ctx.register(GlobalThreadConfiguration::class.java, FastEventPublisher::class.java)
             ctx.registerBeanDefinition("crossModuleListener", RootBeanDefinition(isolatedListener))
             ctx.refresh() // before the fix this threw LambdaConversionException("Invalid caller: ...")
 

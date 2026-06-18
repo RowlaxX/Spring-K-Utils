@@ -1,6 +1,6 @@
 package fr.rowlaxx.springkutils.event
 
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.event.component.FastEventPublisher
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -166,13 +166,13 @@ class FastEventPublisherIntegrationTest {
     @EnableAspectJAutoProxy
     open class TestConfig {
         @Bean
-        open fun executors() = GlobalExecutorsConfiguration()
+        open fun executors() = GlobalThreadConfiguration()
 
         @Bean
         @Primary
         open fun fastEventPublisher(
             ctx: org.springframework.context.ApplicationContext,
-            executors: GlobalExecutorsConfiguration,
+            executors: GlobalThreadConfiguration,
         ) = FastEventPublisher(ctx, executors)
 
         @Bean

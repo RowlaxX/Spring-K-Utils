@@ -1,6 +1,7 @@
 package fr.rowlaxx.springkutils.concurrent.config
 
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
+import io.netty.channel.nio.NioEventLoopGroup
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.asCoroutineDispatcher
 import org.springframework.context.annotation.Bean
@@ -10,12 +11,13 @@ import org.springframework.scheduling.concurrent.ConcurrentTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.ForkJoinWorkerThread
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
 
 @Configuration
-class GlobalExecutorsConfiguration {
+class GlobalThreadConfiguration {
     private val globalExceptionHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
         log.error("Uncaught exception dropped to thread-level in ${thread.name}", throwable)
     }
@@ -56,8 +58,12 @@ class GlobalExecutorsConfiguration {
         true
     )
 
+    // One io core is reserved for the WebSocket transport's dedicated Netty "IO" event-loop thread
+    // (Spring-K-Socket WebSocketTransportConfiguration). Netty event loops are permanent select()
+    // loops and cannot share this ForkJoinPool, so we hand that one core out and keep the rest here
+    // for deserialization/handler work — the total io budget (ioParallelism) is unchanged.
     val ioPool = ForkJoinPool(
-        ioParallelism,
+        max(1, ioParallelism - 1),
         NamedForkJoinThreadFactory("HTTP/WS "),
         globalExceptionHandler, // 3. (Optional) Also set as the pool's default handler
         true
@@ -82,6 +88,11 @@ class GlobalExecutorsConfiguration {
 
     val ioDispatcher = ioExec.asCoroutineDispatcher()
     val asyncDispatcher = asyncExec.asCoroutineDispatcher()
+
+
+    @Suppress("DEPRECATION")
+    val ioEventLoopGroup = NioEventLoopGroup(1, ThreadFactory { runnable -> Thread(runnable, "IO").apply { isDaemon = true } })
+
 
     @PreDestroy
     fun destroy() {

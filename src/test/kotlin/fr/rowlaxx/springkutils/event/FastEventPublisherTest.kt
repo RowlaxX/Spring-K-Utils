@@ -1,7 +1,7 @@
 package fr.rowlaxx.springkutils.event
 
 import com.sun.management.ThreadMXBean
-import fr.rowlaxx.springkutils.concurrent.config.GlobalExecutorsConfiguration
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.event.annotation.Blocking
 import fr.rowlaxx.springkutils.event.component.FastEventPublisher
 import org.junit.jupiter.api.AfterEach
@@ -96,13 +96,13 @@ class FastEventPublisherTest {
     private lateinit var ctx: AnnotationConfigApplicationContext
     private lateinit var publisher: ApplicationEventPublisher
     private lateinit var listeners: RecordingListeners
-    private lateinit var executors: GlobalExecutorsConfiguration
+    private lateinit var executors: GlobalThreadConfiguration
 
     @BeforeEach
     fun setUp() {
         ctx = AnnotationConfigApplicationContext().apply {
             register(
-                GlobalExecutorsConfiguration::class.java,
+                GlobalThreadConfiguration::class.java,
                 FastEventPublisher::class.java,
                 RecordingListeners::class.java,
                 PublisherHolder::class.java,
@@ -111,7 +111,7 @@ class FastEventPublisherTest {
         }
         publisher = ctx.getBean(ApplicationEventPublisher::class.java)
         listeners = ctx.getBean(RecordingListeners::class.java)
-        executors = ctx.getBean(GlobalExecutorsConfiguration::class.java)
+        executors = ctx.getBean(GlobalThreadConfiguration::class.java)
     }
 
     @AfterEach
