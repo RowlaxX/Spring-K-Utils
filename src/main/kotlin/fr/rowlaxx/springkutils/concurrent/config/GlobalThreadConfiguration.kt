@@ -46,7 +46,7 @@ class GlobalThreadConfiguration {
         override fun newThread(pool: ForkJoinPool): ForkJoinWorkerThread {
             val thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool)
             thread.name = "$prefix${counter.getAndIncrement()}"
-            thread.uncaughtExceptionHandler = globalExceptionHandler // Attach here
+            thread.uncaughtExceptionHandler = globalExceptionHandler
             return thread
         }
     }
@@ -54,18 +54,14 @@ class GlobalThreadConfiguration {
     val asyncPool = ForkJoinPool(
         max(1, Runtime.getRuntime().availableProcessors() - 1 - ioParallelism),
         NamedForkJoinThreadFactory("Core "),
-        globalExceptionHandler, // 3. (Optional) Also set as the pool's default handler
+        globalExceptionHandler,
         true
     )
 
-    // One io core is reserved for the WebSocket transport's dedicated Netty "IO" event-loop thread
-    // (Spring-K-Socket WebSocketTransportConfiguration). Netty event loops are permanent select()
-    // loops and cannot share this ForkJoinPool, so we hand that one core out and keep the rest here
-    // for deserialization/handler work — the total io budget (ioParallelism) is unchanged.
     val ioPool = ForkJoinPool(
         max(1, ioParallelism - 1),
         NamedForkJoinThreadFactory("HTTP/WS "),
-        globalExceptionHandler, // 3. (Optional) Also set as the pool's default handler
+        globalExceptionHandler,
         true
     )
 
