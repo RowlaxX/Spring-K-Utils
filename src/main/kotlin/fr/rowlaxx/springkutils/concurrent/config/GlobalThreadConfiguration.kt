@@ -22,7 +22,10 @@ class GlobalThreadConfiguration {
         log.error("Uncaught exception dropped to thread-level in ${thread.name}", throwable)
     }
 
-    val ioParallelism = max(1, min(6, Runtime.getRuntime().availableProcessors() / 4))
+    val schedulerPoolSize = 1
+    val ioEventLoopSize = max(2, Runtime.getRuntime().availableProcessors() / 4)
+    val ioParallelism = max(2, (Runtime.getRuntime().availableProcessors() / 4))
+    val asyncParallelism = max(3, Runtime.getRuntime().availableProcessors() - ioParallelism - schedulerPoolSize - ioEventLoopSize)
 
     private val taskDecorator: TaskDecorator = TaskDecorator {
         Runnable {
@@ -52,14 +55,14 @@ class GlobalThreadConfiguration {
     }
 
     val asyncPool = ForkJoinPool(
-        max(1, Runtime.getRuntime().availableProcessors() - 1 - ioParallelism),
+        asyncParallelism,
         NamedForkJoinThreadFactory("Core "),
         globalExceptionHandler,
         true
     )
 
     val ioPool = ForkJoinPool(
-        max(1, ioParallelism - 1),
+        ioParallelism,
         NamedForkJoinThreadFactory("HTTP/WS "),
         globalExceptionHandler,
         true
@@ -74,7 +77,7 @@ class GlobalThreadConfiguration {
     }
 
     val taskScheduler = ThreadPoolTaskScheduler().also {
-        it.poolSize = 1
+        it.poolSize = schedulerPoolSize
         it.setTaskDecorator(schedulerDecorator)
         it.setThreadFactory { task -> Thread(task, "Scheduler").also { t ->
             t.uncaughtExceptionHandler = globalExceptionHandler
@@ -87,7 +90,7 @@ class GlobalThreadConfiguration {
 
 
     @Suppress("DEPRECATION")
-    val ioEventLoopGroup = NioEventLoopGroup(1, ThreadFactory { runnable -> Thread(runnable, "IO").apply { isDaemon = true } })
+    val ioEventLoopGroup = NioEventLoopGroup(ioEventLoopSize, ThreadFactory { runnable -> Thread(runnable, "IO").apply { isDaemon = true } })
 
 
     @PreDestroy
