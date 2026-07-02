@@ -918,4 +918,115 @@ class SegmentedBitSetTest {
         assertTrue(bitset2.containsAll(0L..10L))
         assertTrue(bitset2.containsAll(12L..15L))
     }
+
+    // -- isEmpty / isNotEmpty --------------------------------------------------------------------
+
+    @Test
+    fun testIsEmptyOnFreshSet() {
+        val bitset = MutableSegmentedBitSet()
+        assertTrue(bitset.isEmpty())
+        assertFalse(bitset.isNotEmpty())
+    }
+
+    @Test
+    fun testEmptyConstantIsEmpty() {
+        assertTrue(SegmentedBitSet.EMPTY.isEmpty())
+        assertFalse(SegmentedBitSet.EMPTY.isNotEmpty())
+    }
+
+    @Test
+    fun testIsNotEmptyWithSingleBit() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(42)
+        assertFalse(bitset.isEmpty())
+        assertTrue(bitset.isNotEmpty())
+    }
+
+    @Test
+    fun testIsNotEmptyWithRange() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(0L..9L)
+        assertFalse(bitset.isEmpty())
+        assertTrue(bitset.isNotEmpty())
+    }
+
+    @Test
+    fun testBecomesEmptyAfterRemovingEveryBit() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(0L..2L)
+        assertTrue(bitset.isNotEmpty())
+
+        bitset.removeAll(0L..2L)
+        assertTrue(bitset.isEmpty())
+        assertFalse(bitset.isNotEmpty())
+    }
+
+    // -- toList ----------------------------------------------------------------------------------
+
+    @Test
+    fun testToListOnEmptySet() {
+        assertEquals(emptyList<Long>(), MutableSegmentedBitSet().toList())
+        assertEquals(emptyList<Long>(), SegmentedBitSet.EMPTY.toList())
+    }
+
+    @Test
+    fun testToListSingleBit() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(7)
+        assertEquals(listOf(7L), bitset.toList())
+    }
+
+    @Test
+    fun testToListContiguousRange() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(0L..4L)
+        assertEquals(listOf(0L, 1L, 2L, 3L, 4L), bitset.toList())
+    }
+
+    @Test
+    fun testToListMultipleSegmentsAreConcatenatedAscending() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(4L..5L)
+        bitset.add(0)
+        bitset.addAll(8L..9L)
+        assertEquals(listOf(0L, 4L, 5L, 8L, 9L), bitset.toList())
+    }
+
+    @Test
+    fun testToListMatchesSize() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(0L..9L)
+        bitset.addAll(20L..24L)
+        val list = bitset.toList()
+        assertEquals(bitset.size(), list.size.toLong())
+        assertEquals((0L..9L) + (20L..24L), list)
+    }
+
+    @Test
+    fun testToListWithNegativeValues() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(-3L..-1L)
+        bitset.add(2)
+        assertEquals(listOf(-3L, -2L, -1L, 2L), bitset.toList())
+    }
+
+    @Test
+    fun testToListIncludesRangeBounds() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll(5L..8L)
+        val list = bitset.toList()
+        assertEquals(5L, list.first())
+        assertEquals(8L, list.last())
+    }
+
+    @Test
+    fun testToListThrowsWhenSizeExceedsIntMax() {
+        // A single segment wider than Int.MAX_VALUE: reported size overflows an Int, so no materialisation.
+        val content = TreeMap<Long, Long>()
+        content[0L] = Int.MAX_VALUE.toLong() // size = Int.MAX_VALUE + 1
+        val bitset = SegmentedBitSet(content)
+
+        assertTrue(bitset.size() > Int.MAX_VALUE)
+        assertThrows<IllegalStateException> { bitset.toList() }
+    }
 }

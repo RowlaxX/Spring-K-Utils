@@ -300,6 +300,46 @@ open class SegmentedBitSet internal constructor(
     }
 
     /**
+     * Returns true if no bit is set to true in this bit set.
+     */
+    fun isEmpty(): Boolean = content.isEmpty()
+
+    /**
+     * Returns true if at least one bit is set to true in this bit set.
+     */
+    fun isNotEmpty(): Boolean = content.isNotEmpty()
+
+    /**
+     * Returns every bit set to true, in ascending order, as a [List].
+     *
+     * Only supported when the number of set bits fits in an [Int]: the result is a materialised list,
+     * so a set whose [size] exceeds [Int.MAX_VALUE] cannot be represented.
+     *
+     * @throws IllegalStateException if [size] is greater than [Int.MAX_VALUE].
+     */
+    fun toList(): List<Long> {
+        if (content.isEmpty()) {
+            return emptyList()
+        }
+
+        val size = size()
+        if (size > Int.MAX_VALUE) {
+            throw IllegalStateException("Cannot convert a SegmentedBitSet with $size elements to a list: it exceeds Int.MAX_VALUE")
+        }
+
+        val result = ArrayList<Long>(size.toInt())
+        content.forEach { (start, end) ->
+            var current = start
+            while (current <= end) {
+                result.add(current)
+                if (current == Long.MAX_VALUE) break
+                current++
+            }
+        }
+        return result
+    }
+
+    /**
      * Iterates over each range of present elements in this bit set.
      *
      * @param action a function that takes the start and end of each range (inclusive).
