@@ -20,10 +20,11 @@ import java.time.Duration
  * loops are permanent `select()` loops and cannot run on that ForkJoinPool directly — it also runs
  * deserialization and would starve.)
  *
- * The client-wide request/read timeouts are disabled because WebSockets are long-lived and their
- * liveness is owned elsewhere; REST callers set a finite per-request timeout via
- * `BoundRequestBuilder.setRequestTimeout`. Keep response handling OFF this thread (offload to a worker
- * pool) so a slow parse never stalls socket I/O.
+ * The client-wide request/read timeouts are finite so a stalled REST call cannot hang forever.
+ * WebSockets are long-lived and would be wrongly aborted by these, so the WS transport overrides them
+ * to "disabled" per-request (`setRequestTimeout(-1ms)`/`setReadTimeout(-1ms)` in Spring-K-Socket's
+ * `ClientWebSocketFactory`) — a WS is a single never-ending AHC request. Keep response handling OFF
+ * this thread (offload to a worker pool) so a slow parse never stalls socket I/O.
  */
 @Configuration
 class HttpClientConfiguration(
