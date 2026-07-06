@@ -1,17 +1,17 @@
 package fr.rowlaxx.springkutils.math.data
 
-import java.util.TreeMap
+import fr.rowlaxx.springkutils.array.MutableLongLongEntangledArray
 
 /**
  * A mutable version of [SegmentedBitSet].
  */
-class MutableSegmentedBitSet internal constructor(
-    content: TreeMap<Long, Long>
+class  MutableSegmentedBitSet internal constructor(
+    content: MutableLongLongEntangledArray
 ) : SegmentedBitSet(content) {
     /**
      * Creates an empty MutableSegmentedBitSet.
      */
-    constructor() : this(TreeMap<Long, Long>())
+    constructor() : this(MutableLongLongEntangledArray())
 
     /**
      * Adds the specified number to this bit set.
@@ -30,22 +30,25 @@ class MutableSegmentedBitSet internal constructor(
 
         // Find overlapping or adjacent segments
         // An adjacent segment to start is one that ends at start - 1
-        val floor = if (newStart > Long.MIN_VALUE) content.floorEntry(newStart - 1) else content.floorEntry(newStart)
-        if (floor != null && floor.value >= newStart - 1) {
-            newStart = minOf(newStart, floor.key)
-            newEnd = maxOf(newEnd, floor.value)
-            content.remove(floor.key)
+        val floorKey = if (newStart > Long.MIN_VALUE) content.floorKey(newStart - 1) else content.floorKey(newStart)
+        if (floorKey != null) {
+            val floorEnd = content.getOrDefault(floorKey, Long.MIN_VALUE)
+            if (floorEnd >= newStart - 1) {
+                newStart = minOf(newStart, floorKey)
+                newEnd = maxOf(newEnd, floorEnd)
+                content.remove(floorKey)
+            }
         }
 
         // Find segments that start within or adjacent to the new range
-        var ceiling = content.ceilingEntry(newStart)
-        while (ceiling != null && (newEnd == Long.MAX_VALUE || ceiling.key <= newEnd + 1)) {
-            newEnd = maxOf(newEnd, ceiling.value)
-            content.remove(ceiling.key)
-            ceiling = content.ceilingEntry(newStart)
+        var ceilingKey = content.ceilingKey(newStart)
+        while (ceilingKey != null && (newEnd == Long.MAX_VALUE || ceilingKey <= newEnd + 1)) {
+            newEnd = maxOf(newEnd, content.getOrDefault(ceilingKey, Long.MIN_VALUE))
+            content.remove(ceilingKey)
+            ceilingKey = content.ceilingKey(newStart)
         }
 
-        content[newStart] = newEnd
+        content.put(newStart, newEnd)
     }
 
     /**
@@ -63,29 +66,32 @@ class MutableSegmentedBitSet internal constructor(
         val start = range.first
         val end = range.last
 
-        val floor = content.floorEntry(start)
-        if (floor != null && floor.value >= start) {
-            val oldEnd = floor.value
-            if (floor.key < start) {
-                content[floor.key] = start - 1
-            } else {
-                content.remove(floor.key)
-            }
-            
-            if (oldEnd > end) {
-                content[end + 1] = oldEnd
+        val floorKey = content.floorKey(start)
+        if (floorKey != null) {
+            val floorEnd = content.getOrDefault(floorKey, Long.MIN_VALUE)
+            if (floorEnd >= start) {
+                val oldEnd = floorEnd
+                if (floorKey < start) {
+                    content.put(floorKey, start - 1)
+                } else {
+                    content.remove(floorKey)
+                }
+
+                if (oldEnd > end) {
+                    content.put(end + 1, oldEnd)
+                }
             }
         }
 
-        var ceiling = content.ceilingEntry(start)
-        while (ceiling != null && ceiling.key <= end) {
-            val oldEnd = ceiling.value
-            content.remove(ceiling.key)
+        var ceilingKey = content.ceilingKey(start)
+        while (ceilingKey != null && ceilingKey <= end) {
+            val oldEnd = content.getOrDefault(ceilingKey, Long.MIN_VALUE)
+            content.remove(ceilingKey)
             if (oldEnd > end) {
-                content[end + 1] = oldEnd
+                content.put(end + 1, oldEnd)
                 break
             }
-            ceiling = content.ceilingEntry(start)
+            ceilingKey = content.ceilingKey(start)
         }
     }
 
@@ -103,9 +109,9 @@ class MutableSegmentedBitSet internal constructor(
         if (range.isEmpty()) return
         val intersect = subset(range)
         removeAll(range)
-        
+
         var current = range.first
-        intersect.content.forEach { (s, e) ->
+        intersect.content.forEach { s, e ->
             if (current < s) {
                 addAll(current..s - 1)
             }
@@ -129,30 +135,43 @@ class MutableSegmentedBitSet internal constructor(
     fun setAll(range: LongRange, present: Boolean) {
         if (present) addAll(range) else removeAll(range)
     }
-    
+
     /**
      * Shifts all numbers in this bit set to the right by the specified count.
      */
     fun shiftRight(count: Long) {
         if (count == 0L) return
         if (count < 0) return shiftLeft(-count)
-        val entries = content.toList()
-        content.clear()
-        entries.forEach { (start, end) ->
-            content[start + count] = end + count
-        }
+        shiftBy(count)
     }
-    
+
     /**
      * Shifts all numbers in this bit set to the left by the specified count.
      */
     fun shiftLeft(count: Long) {
         if (count == 0L) return
         if (count < 0) return shiftRight(-count)
-        val entries = content.toList()
+        shiftBy(-count)
+    }
+
+    /**
+     * Snapshots the segments, clears the backing store, and re-inserts every segment shifted by
+     * [delta]. A uniform shift preserves the ascending order, so the re-insert is a straight append.
+     */
+    private fun shiftBy(delta: Long) {
+        val n = content.size
+        if (n == 0) return
+        val starts = LongArray(n)
+        val ends = LongArray(n)
+        var i = 0
+        content.forEach { start, end ->
+            starts[i] = start
+            ends[i] = end
+            i++
+        }
         content.clear()
-        entries.forEach { (start, end) ->
-            content[start - count] = end - count
+        for (k in 0 until n) {
+            content.put(starts[k] + delta, ends[k] + delta)
         }
     }
 }
