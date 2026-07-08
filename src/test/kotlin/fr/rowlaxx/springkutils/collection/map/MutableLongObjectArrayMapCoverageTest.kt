@@ -246,7 +246,7 @@ class MutableLongObjectArrayMapCoverageTest {
         a.put(5L, "x")
         assertEquals("x", a.remove(5L))
         assertEquals(0, a.size)
-        assertTrue(a.isEmpty)
+        assertTrue(a.isEmpty())
         assertEquals(0, startOf(a))
         assertEquals(0, endOf(a))
         a.put(9L, "y")
@@ -255,7 +255,8 @@ class MutableLongObjectArrayMapCoverageTest {
 
     @Test
     fun `remove front advances start and nulls slot`() {
-        val a = MutableLongObjectArrayMap<String>()
+        // Tight capacity so the single removal keeps usage at 75% (>= 70%) and no shrink recompacts.
+        val a = MutableLongObjectArrayMap<String>(4)
         (0L..3L).forEach { a.put(it, "v$it") }
         val oldStart = startOf(a)
         assertEquals("v0", a.remove(0L))
@@ -299,7 +300,7 @@ class MutableLongObjectArrayMapCoverageTest {
         for (i in 0L until 20L) a.put(i, i)
         for (i in 0L until 20L) assertEquals(i, a.remove(i))
         assertEquals(0, a.size)
-        assertTrue(a.isEmpty)
+        assertTrue(a.isEmpty())
     }
 
     @Test
@@ -675,7 +676,7 @@ class MutableLongObjectArrayMapCoverageTest {
         assertEquals(10, a.size)
         a.remove(0L); a.remove(9L)
         assertEquals(8, a.size)
-        assertTrue(a.isNotEmpty)
+        assertTrue(a.isNotEmpty())
     }
 
     @Test
@@ -731,8 +732,10 @@ class MutableLongObjectArrayMapCoverageTest {
 
     @Test
     fun `search respects advanced start`() {
-        val a = MutableLongObjectArrayMap<Long>()
-        for (i in 0L until 5L) a.put(i, i)
+        // 10 entries in a capacity-10 map: removing the two front keys leaves 80% usage, so start
+        // advances to 2 without a shrink recompacting the window back to index 0.
+        val a = MutableLongObjectArrayMap<Long>(10)
+        for (i in 0L until 10L) a.put(i, i)
         a.remove(0L); a.remove(1L) // start now 2
         assertEquals(2, startOf(a))
         assertEquals(2, search(a, 2L)) // key 2 sits at physical index 2

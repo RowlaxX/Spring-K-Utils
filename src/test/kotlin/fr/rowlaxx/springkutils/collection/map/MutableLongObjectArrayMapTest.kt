@@ -19,7 +19,7 @@ class MutableLongObjectArrayMapTest {
     fun `empty array reports size 0 and misses every key`() {
         val a = MutableLongObjectArrayMap<String>()
         assertEquals(0, a.size)
-        assertTrue(a.isEmpty)
+        assertTrue(a.isEmpty())
         assertNull(a[42L])
         assertFalse(a.containsKey(42L))
     }
@@ -114,7 +114,7 @@ class MutableLongObjectArrayMapTest {
         for (i in 0L until 10L) a.put(i, i)
         a.removeIf { _, _ -> true }
         assertEquals(0, a.size)
-        assertTrue(a.isEmpty)
+        assertTrue(a.isEmpty())
         a.put(123L, 123L)
         assertEquals(123L, a[123L])
         assertEquals(1, a.size)

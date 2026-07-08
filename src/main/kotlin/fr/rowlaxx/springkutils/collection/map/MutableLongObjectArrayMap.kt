@@ -25,8 +25,8 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
     private var end = 0
 
     val size get() = end - start
-    val isEmpty get() = end == start
-    val isNotEmpty get() = end != start
+    fun isEmpty(): Boolean = end == start
+    fun isNotEmpty(): Boolean = end != start
 
     val firstKey: Long get() = if (size == 0) throw NoSuchElementException() else keys[start]
     val lastKey: Long get() = if (size == 0) throw NoSuchElementException() else keys[end - 1]
@@ -104,6 +104,7 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
                 values[start] = null
                 start++
                 if (start == end) { start = 0; end = 0 }
+                maybeShrink()
                 return old
             }
             if (key == keys[end - 1]) {
@@ -112,6 +113,7 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
                 end--
                 values[end] = null
                 if (start == end) { start = 0; end = 0 }
+                maybeShrink()
                 return old
             }
         }
@@ -120,6 +122,7 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
         @Suppress("UNCHECKED_CAST")
         val old = values[i] as V
         removeAt(i)
+        maybeShrink()
         return old
     }
 
@@ -249,6 +252,7 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
         Arrays.fill(values, w, end, null)
         end = w
         if (start == end) { start = 0; end = 0 }
+        maybeShrink()
     }
 
     /** Removes every entry, nulling the value slots so they don't pin their objects. */
@@ -306,5 +310,38 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
             }
         }
         if (start == end) { start = 0; end = 0 }
+    }
+
+    /**
+     * Called after a removal to release capacity retained by a transient size spike. Once the live
+     * size drops below [SHRINK_THRESHOLD_PERCENT]% of the backing arrays, they are reallocated so the
+     * new size fills ~[SHRINK_TARGET_PERCENT]% of the smaller arrays (leaving a little headroom before
+     * the next grow). The old, larger value array is dropped whole, releasing every reference in its
+     * now-unused slots. A no-op when usage is still healthy or when shrinking wouldn't actually
+     * reduce the capacity.
+     */
+    private fun maybeShrink() {
+        val capacity = keys.size
+        val n = end - start
+        if (n < MIN_SHRINK_SIZE) return
+        if (n.toLong() * 100 >= capacity.toLong() * SHRINK_THRESHOLD_PERCENT) return
+
+        val newCapacity = maxOf(1, ((n.toLong() * 100 + (SHRINK_TARGET_PERCENT - 1)) / SHRINK_TARGET_PERCENT).toInt())
+        if (newCapacity >= capacity) return
+
+        val newKeys = LongArray(newCapacity)
+        val newValues = arrayOfNulls<Any?>(newCapacity)
+        System.arraycopy(keys, start, newKeys, 0, n)
+        System.arraycopy(values, start, newValues, 0, n)
+        keys = newKeys
+        values = newValues
+        start = 0
+        end = n
+    }
+
+    private companion object {
+        private const val MIN_SHRINK_SIZE = 16
+        private const val SHRINK_THRESHOLD_PERCENT = 70
+        private const val SHRINK_TARGET_PERCENT = 85
     }
 }

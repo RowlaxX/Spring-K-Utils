@@ -58,7 +58,7 @@ object ArrayUtils {
     private fun warnIfLarge(elements: Int, bytesPerElement: Int, type: String) {
         val bytes = elements.toLong() * bytesPerElement
         if (bytes > SCRATCH_WARN_BYTES) {
-            log.warn(
+            log.warn("Scratch {} array taking too much - {} - {}MB - {}x more",
                 type, elements, bytes / (1024 * 1024), SCRATCH_WARN_BYTES / (1024 * 1024),
             )
         }

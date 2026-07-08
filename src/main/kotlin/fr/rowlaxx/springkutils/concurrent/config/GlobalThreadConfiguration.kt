@@ -99,6 +99,7 @@ class GlobalThreadConfiguration {
         ioPool.shutdown()
         asyncPool.shutdown()
         taskScheduler.shutdown()
+        ioEventLoopGroup.shutdownGracefully()
     }
 
     @Bean
