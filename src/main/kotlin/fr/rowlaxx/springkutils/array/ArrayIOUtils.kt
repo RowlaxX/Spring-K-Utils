@@ -16,7 +16,7 @@ import java.nio.ByteBuffer
  *    and the chosen widths are packed two bits each into a single leading *magic* byte
  *    ([packMagic] / [widthAt]).
  *
- * The per-type serializers (e.g. [IntDoubleEntangledArray.serialize]) own the layout — how many
+ * The per-type serializers (e.g. [fr.rowlaxx.marketdata.common.vector.IntDoubleEntangledArray.serialize]) own the layout — how many
  * fields per packet and how quantities are encoded — and lean on these helpers for the shared
  * mechanics.
  */

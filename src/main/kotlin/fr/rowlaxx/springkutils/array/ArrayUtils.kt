@@ -52,6 +52,18 @@ object ArrayUtils {
         }
     }
 
+    private const val SCRATCH_WARN_BYTES = 2L * 1024 * 1024
+    private const val OBJECT_REF_BYTES = 4
+
+    private fun warnIfLarge(elements: Int, bytesPerElement: Int, type: String) {
+        val bytes = elements.toLong() * bytesPerElement
+        if (bytes > SCRATCH_WARN_BYTES) {
+            log.warn(
+                type, elements, bytes / (1024 * 1024), SCRATCH_WARN_BYTES / (1024 * 1024),
+            )
+        }
+    }
+
     class ScratchIntArrayFactory(initialSize: Int) {
         private val scratch = ThreadLocal.withInitial {
             warnIfShared();
@@ -62,6 +74,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = IntArray(minSize)
+                warnIfLarge(minSize, Int.SIZE_BYTES, "Int")
                 scratch.set(array)
             }
             return array
@@ -78,6 +91,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = BooleanArray(minSize)
+                warnIfLarge(minSize, 1, "Boolean")
                 scratch.set(array)
             }
             return array
@@ -94,6 +108,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = LongArray(minSize)
+                warnIfLarge(minSize, Long.SIZE_BYTES, "Long")
                 scratch.set(array)
             }
             return array
@@ -110,6 +125,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = DoubleArray(minSize)
+                warnIfLarge(minSize, Double.SIZE_BYTES, "Double")
                 scratch.set(array)
             }
             return array
@@ -126,6 +142,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = FloatArray(minSize)
+                warnIfLarge(minSize, Float.SIZE_BYTES, "Float")
                 scratch.set(array)
             }
             return array
@@ -142,6 +159,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = ShortArray(minSize)
+                warnIfLarge(minSize, Short.SIZE_BYTES, "Short")
                 scratch.set(array)
             }
             return array
@@ -158,6 +176,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = ByteArray(minSize)
+                warnIfLarge(minSize, 1, "Byte")
                 scratch.set(array)
             }
             return array
@@ -174,6 +193,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = CharArray(minSize)
+                warnIfLarge(minSize, Char.SIZE_BYTES, "Char")
                 scratch.set(array)
             }
             return array
@@ -191,6 +211,7 @@ object ArrayUtils {
             var array = scratch.get()
             if (array.size < minSize) {
                 array = arrayOfNulls<Any?>(minSize)
+                warnIfLarge(minSize, OBJECT_REF_BYTES, "Object")
                 scratch.set(array)
             }
             return array
