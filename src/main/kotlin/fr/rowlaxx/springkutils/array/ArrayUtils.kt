@@ -1,5 +1,6 @@
 package fr.rowlaxx.springkutils.array
 
+import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import java.util.*
 import java.util.concurrent.ForkJoinWorkerThread
@@ -47,8 +48,8 @@ object ArrayUtils {
     }
     
     internal fun warnIfShared() {
-        if (Thread.currentThread() !is ForkJoinWorkerThread) {
-            log.warn("Potential memory leak detected. Scratch arrays must be requested from a ForkJoinWorkerThread.")
+        if (!Thread.currentThread().name.startsWith(GlobalThreadConfiguration.ASYNC_THREAD_NAME)) {
+            log.warn("Potential memory leak detected. Scratch arrays must be requested from the async pool.")
         }
     }
 
@@ -267,7 +268,7 @@ object ArrayUtils {
         private val cumEnd: IntArray,
         private val values: Array<Any?>,
         private val keyCount: Int,
-    ) {
+    ) : AutoCloseable {
 
         fun first(): List<V> {
             if (keyCount == 0) {
@@ -323,7 +324,7 @@ object ArrayUtils {
             }
         }
 
-        fun clear() {
+        override fun close() {
             if (keyCount == 0) {
                 return
             }

@@ -101,9 +101,9 @@ class GlobalThreadConfiguration {
         saturationPolicy(threadName),
     )
 
-    val asyncPool = newBoundedPool(asyncParallelism, "Core")
+    val asyncPool = newBoundedPool(asyncParallelism, ASYNC_THREAD_NAME)
 
-    val ioPool = newBoundedPool(ioParallelism, "HTTP/WS")
+    val ioPool = newBoundedPool(ioParallelism, IO_THREAD_NAME)
 
     val asyncExec = ConcurrentTaskExecutor(asyncPool).also {
         it.setTaskDecorator(taskDecorator)
@@ -142,8 +142,10 @@ class GlobalThreadConfiguration {
     @Bean
     fun configureTasks() = taskScheduler
 
-    private companion object {
-        private const val SCHEDULER_THREAD_NAME = "Scheduler"
+    companion object {
+        const val SCHEDULER_THREAD_NAME = "Scheduler"
+        const val ASYNC_THREAD_NAME = "Core"
+        const val IO_THREAD_NAME = "HTTP/WS"
     }
 
 }
