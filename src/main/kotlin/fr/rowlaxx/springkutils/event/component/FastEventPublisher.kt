@@ -18,8 +18,7 @@ import java.lang.invoke.LambdaMetafactory
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.lang.reflect.Method
-import java.util.concurrent.ForkJoinPool
-import java.util.concurrent.ForkJoinTask
+import java.util.concurrent.Executor
 import java.util.function.Consumer
 
 /**
@@ -38,9 +37,9 @@ import java.util.function.Consumer
  * Dispatch is keyed on the **exact** runtime class of the event (`event.javaClass`) — no generic
  * type resolution, no listener-retriever cache, no `PayloadApplicationEvent` wrapper. Per publish:
  *  - a [fr.rowlaxx.springkutils.event.annotation.Blocking] listener runs inline on the publishing thread — **zero allocation**;
- *  - any other listener is submitted to the async pool as a single lightweight [ForkJoinTask] —
- *    **one allocation** (avoids the extra `RunnableExecuteAction` wrapper that `execute(Runnable)`
- *    would add).
+ *  - any other listener is submitted to the async pool as a single lightweight [Runnable] task —
+ *    **one allocation** (the task carries both the listener and the event, so no extra closure
+ *    capture is needed).
  *
  * Ordering between listeners of the same event is unspecified.
  */
@@ -51,7 +50,7 @@ class FastEventPublisher(
     executors: GlobalThreadConfiguration,
 ) : ApplicationEventPublisher, SmartInitializingSingleton {
 
-    private val asyncPool: ForkJoinPool = executors.asyncPool
+    private val asyncPool: Executor = executors.asyncPool
 
     private class Subscribers(
         @JvmField val blocking: Array<Consumer<Any>>,
@@ -80,17 +79,13 @@ class FastEventPublisher(
     private class AsyncEventTask(
         private val consumer: Consumer<Any>,
         private val event: Any,
-    ) : ForkJoinTask<Void?>() {
-        override fun getRawResult(): Void? = null
-        override fun setRawResult(value: Void?) {}
-
-        override fun exec(): Boolean {
+    ) : Runnable {
+        override fun run() {
             try {
                 consumer.accept(event)
             } catch (t: Throwable) {
                 log.error("Async event listener failed for {}", event.javaClass.name, t)
             }
-            return true
         }
     }
 
