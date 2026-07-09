@@ -5,6 +5,7 @@ import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import io.netty.channel.nio.NioEventLoopGroup
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.TaskDecorator
@@ -133,6 +134,8 @@ class GlobalThreadConfiguration {
     @PreDestroy
     fun destroy() {
         log.info("Closing threads")
+        ioDispatcher.cancel()
+        asyncDispatcher.cancel()
         ioPool.shutdown()
         asyncPool.shutdown()
         taskScheduler.shutdown()
