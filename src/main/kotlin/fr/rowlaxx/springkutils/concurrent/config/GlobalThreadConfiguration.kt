@@ -2,7 +2,8 @@ package fr.rowlaxx.springkutils.concurrent.config
 
 import fr.rowlaxx.springkutils.concurrent.core.CountedThreadFactory
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
-import io.netty.channel.nio.NioEventLoopGroup
+import io.netty.channel.MultiThreadIoEventLoopGroup
+import io.netty.channel.nio.NioIoHandler
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -50,20 +51,7 @@ class GlobalThreadConfiguration {
             asyncExec.submit(taskDecorator.decorate(it))
         }
     }
-
-    /**
-     * Rejection policy for the bounded worker pools, chosen by *who* is submitting the task:
-     *
-     *  - **The scheduler thread** — the task is fire-and-forget and its trigger will submit a fresh one
-     *    on the next tick, so a saturated pool simply drops it. Blocking the single scheduler thread on
-     *    [java.util.concurrent.BlockingQueue.put] would stall every other scheduled task behind it.
-     *  - **A worker of this same pool** (e.g. an async event listener that publishes another event, which
-     *    routes straight back into this pool) — the task is run inline on the caller. Blocking here would
-     *    deadlock the pool: every worker parks in `queue.put()` waiting for space, and no worker is left
-     *    to drain the queue that would free it. Running inline always makes progress.
-     *  - **Any other (external) producer** — the caller blocks until the queue drains. This is the
-     *    intended backpressure that paces producers to the pool's real throughput.
-     */
+    
     private fun saturationPolicy(ownThreadPrefix: String) = RejectedExecutionHandler { task, executor ->
         if (executor.isShutdown) {
             throw RejectedExecutionException("Executor has been shut down; task rejected")
@@ -117,6 +105,7 @@ class GlobalThreadConfiguration {
     val taskScheduler = ThreadPoolTaskScheduler().also {
         it.poolSize = schedulerPoolSize
         it.setTaskDecorator(schedulerDecorator)
+        it.isRemoveOnCancelPolicy = true
         it.setThreadFactory { task -> Thread(task, SCHEDULER_THREAD_NAME).also { t ->
             t.uncaughtExceptionHandler = globalExceptionHandler
         }}
@@ -127,8 +116,11 @@ class GlobalThreadConfiguration {
     val asyncDispatcher = asyncExec.asCoroutineDispatcher()
 
 
-    @Suppress("DEPRECATION")
-    val ioEventLoopGroup = NioEventLoopGroup(ioEventLoopSize, ThreadFactory { runnable -> Thread(runnable, "IO").apply { isDaemon = true } })
+    val ioEventLoopGroup = MultiThreadIoEventLoopGroup(
+        ioEventLoopSize,
+        ThreadFactory { runnable -> Thread(runnable, "IO").apply { isDaemon = true } },
+        NioIoHandler.newFactory(),
+    )
 
 
     @PreDestroy
