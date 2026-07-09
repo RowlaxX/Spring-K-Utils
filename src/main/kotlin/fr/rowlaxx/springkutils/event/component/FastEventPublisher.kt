@@ -71,7 +71,7 @@ class FastEventPublisher(
             blocking[i].accept(event)
         }
         val async = subs.async
-        for (i in async.indices) {
+        for (i in 0  until async.size) {
             asyncPool.execute(AsyncEventTask(async[i], event))
         }
     }
