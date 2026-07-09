@@ -2,6 +2,7 @@ package fr.rowlaxx.springkutils.concurrent.core
 
 import com.sun.management.ThreadMXBean
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Test
@@ -12,8 +13,18 @@ import java.util.concurrent.atomic.AtomicInteger
  * Not a correctness test — measures bytes allocated while draining N tasks through the
  * TaskQueue hot path (queue never paused). Run manually:
  *   ./gradlew test --tests "*TaskQueueAllocationBench" -i
+ *
+ * The queue's channel is bounded ([TaskQueue.MAX_PENDING_TASKS]) and rejects once full, so tasks are
+ * submitted in chunks that stay comfortably under that cap and each chunk is drained before the next
+ * is produced. In-flight never exceeds [CHUNK], so nothing is rejected while still pushing all N tasks
+ * through the hot path.
  */
 class TaskQueueAllocationBench {
+
+    private companion object {
+        /** In-flight tasks per chunk; kept well under the queue's rejection threshold. */
+        const val CHUNK = TaskQueue.MAX_PENDING_TASKS / 4
+    }
 
     @Test
     fun `measure allocation of draining many tasks`() {
@@ -25,8 +36,13 @@ class TaskQueueAllocationBench {
             // Warm + measure on the submitting thread's allocation is not enough (work happens
             // on the loop thread), so measure total allocation across all threads via GC delta.
             val before = totalAllocated(bean)
-            val deferreds = (1..n).map { queue.enqueue { it } }
-            runBlocking { withTimeout(60_000) { deferreds.forEach { it.await() } } }
+            var produced = 0
+            while (produced < n) {
+                val size = minOf(CHUNK, n - produced)
+                val deferreds = (0 until size).map { queue.enqueue { it } }
+                runBlocking { withTimeout(60_000) { deferreds.forEach { it.await() } } }
+                produced += size
+            }
             val after = totalAllocated(bean)
             queue.close()
             return after - before
@@ -44,7 +60,7 @@ class TaskQueueAllocationBench {
 
     @Test
     fun `measure allocation of submit fire-and-forget path`() {
-        // Mirrors the real app hot path: submit { ... } per message, result not awaited.
+        // Mirrors the real app hot path: submit { ... } per message, result not awaited per task.
         val bean = ManagementFactory.getThreadMXBean() as ThreadMXBean
         val n = 200_000
 
@@ -52,8 +68,16 @@ class TaskQueueAllocationBench {
             val queue = TaskQueue(Dispatchers.Default)
             val done = AtomicInteger(0)
             val before = totalAllocated(bean)
-            repeat(n) { queue.submit { done.incrementAndGet() } }
-            // Drain: close then join so we measure only steady-state submit+execute.
+            var produced = 0
+            while (produced < n) {
+                val size = minOf(CHUNK, n - produced)
+                // Fire the chunk without awaiting each task, then pace on the last one: tasks drain in
+                // FIFO order on the single loop, so its completion means the whole chunk has drained.
+                var last: Job? = null
+                repeat(size) { last = queue.submit { done.incrementAndGet() } }
+                runBlocking { withTimeout(60_000) { last?.join() } }
+                produced += size
+            }
             queue.close()
             runBlocking { withTimeout(60_000) { queue.join() } }
             val after = totalAllocated(bean)

@@ -505,7 +505,7 @@ class ArrayUtilsCoverageTest {
         val items = listOf(e(0, 0), e(1, 1), e(2, 2))
         val g = items.unsafeGroupBy { it.key }
         val views = (0L..2L).map { g[it] }
-        g.clear()
+        g.close()
         @Suppress("UNCHECKED_CAST")
         for (v in views) assertNull((v as List<Any?>)[0])
     }

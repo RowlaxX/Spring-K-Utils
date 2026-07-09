@@ -39,7 +39,7 @@ class ArrayUtilsGroupingTest {
         g.forEach { _, _ -> visited++ }
         g.forEachKey { visited++ }
         assertEquals(0, visited)
-        assertDoesNotThrow { g.clear() }
+        assertDoesNotThrow { g.close() }
     }
 
     @Test
@@ -258,7 +258,7 @@ class ArrayUtilsGroupingTest {
     fun `clear nulls the grouped values so they are not pinned`() {
         val g = listOf(e(1, 0), e(1, 1)).unsafeGroupBy { it.key }
         val view = g.first()
-        g.clear()
+        g.close()
         // The backing scratch slot was nulled; the view now reads null at index 0.
         @Suppress("UNCHECKED_CAST")
         assertNull((view as List<Any?>)[0])
@@ -266,7 +266,7 @@ class ArrayUtilsGroupingTest {
 
     @Test
     fun `clear on an empty grouping is a no-op`() {
-        assertDoesNotThrow { emptyList<E>().unsafeGroupBy { it.key }.clear() }
+        assertDoesNotThrow { emptyList<E>().unsafeGroupBy { it.key }.close() }
     }
 
     @Test
