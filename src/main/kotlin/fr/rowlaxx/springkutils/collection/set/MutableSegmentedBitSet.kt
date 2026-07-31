@@ -111,13 +111,20 @@ class  MutableSegmentedBitSet internal constructor(
         removeAll(range)
 
         var current = range.first
+        var exhausted = false
         intersect.content.forEach { s, e ->
             if (current < s) {
                 addAll(current..s - 1)
             }
-            current = e + 1
+            // A segment ending at MAX_VALUE also ends the range: advancing past it would overflow
+            // and wrongly re-add everything from MIN_VALUE.
+            if (e == Long.MAX_VALUE) {
+                exhausted = true
+            } else {
+                current = e + 1
+            }
         }
-        if (current <= range.last) {
+        if (!exhausted && current <= range.last) {
             addAll(current..range.last)
         }
     }

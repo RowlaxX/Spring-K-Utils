@@ -34,6 +34,38 @@ class SegmentedBitSetTest {
     }
 
     @Test
+    fun testFlipAllRangeEndingAtMaxValue() {
+        // Regression: a flipped segment ending at Long.MAX_VALUE used to overflow (current = e + 1)
+        // and re-add the entire Long range.
+        val bitset = MutableSegmentedBitSet()
+        bitset.add(Long.MAX_VALUE)
+
+        bitset.flipAll(0..Long.MAX_VALUE)
+
+        assertTrue(bitset.contains(0))
+        assertTrue(bitset.contains(Long.MAX_VALUE - 1))
+        assertFalse(bitset.contains(Long.MAX_VALUE))
+        assertFalse(bitset.contains(-1))
+        assertFalse(bitset.contains(Long.MIN_VALUE))
+        assertEquals(Long.MAX_VALUE, bitset.size())
+    }
+
+    @Test
+    fun testFlipAllSegmentEndingAtMaxValueMidRange() {
+        val bitset = MutableSegmentedBitSet()
+        bitset.addAll((Long.MAX_VALUE - 5)..Long.MAX_VALUE)
+
+        bitset.flipAll((Long.MAX_VALUE - 10)..Long.MAX_VALUE)
+
+        assertTrue(bitset.contains(Long.MAX_VALUE - 10))
+        assertTrue(bitset.contains(Long.MAX_VALUE - 6))
+        assertFalse(bitset.contains(Long.MAX_VALUE - 5))
+        assertFalse(bitset.contains(Long.MAX_VALUE))
+        assertFalse(bitset.contains(Long.MAX_VALUE - 11))
+        assertEquals(5, bitset.size())
+    }
+
+    @Test
     fun testMergingSegments() {
         val bitset = MutableSegmentedBitSet()
         bitset.addAll(0L..1L) // 0, 1
