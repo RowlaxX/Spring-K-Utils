@@ -61,5 +61,29 @@ class PreventConcurrentExecutionAspectTest {
             latch.countDown()
             Thread.sleep(100) // Simulate work
         }
+
+        @PreventConcurrentExecution
+        fun primitiveReturningMethod(entered: CountDownLatch, release: CountDownLatch): Int {
+            entered.countDown()
+            release.await()
+            return 42
+        }
+    }
+
+    @Test
+    fun `skipped call on primitive-returning method returns zero instead of crashing`() {
+        // Regression: the aspect used to return null for a skipped call, which Spring AOP rejects
+        // with AopInvocationException when the method's return type is a primitive.
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val first = thread { testService.primitiveReturningMethod(entered, release) }
+        entered.await()
+        try {
+            val skipped = testService.primitiveReturningMethod(CountDownLatch(0), CountDownLatch(0))
+            assertEquals(0, skipped, "A skipped concurrent call must return the primitive zero value")
+        } finally {
+            release.countDown()
+            first.join()
+        }
     }
 }
