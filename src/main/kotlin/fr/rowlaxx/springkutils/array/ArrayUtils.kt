@@ -53,16 +53,21 @@ object ArrayUtils {
         }
     }
 
-    private const val SCRATCH_WARN_BYTES = 2L * 1024 * 1024
+    private const val MAX_CACHED_SCRATCH_BYTES = 2L * 1024 * 1024
     private const val OBJECT_REF_BYTES = 4
 
-    private fun warnIfLarge(elements: Int, bytesPerElement: Int, type: String) {
+    /**
+     * True when an [elements]-element request is too large to cache in the thread-local: it is then
+     * served as a one-shot array, so a transient spike never pins more than
+     * [MAX_CACHED_SCRATCH_BYTES] per factory per thread.
+     */
+    private fun tooLargeToCache(elements: Int, bytesPerElement: Int, type: String): Boolean {
         val bytes = elements.toLong() * bytesPerElement
-        if (bytes > SCRATCH_WARN_BYTES) {
-            log.warn("Scratch {} array taking too much - {} - {}MB - {}x more",
-                type, elements, bytes / (1024 * 1024), SCRATCH_WARN_BYTES / (1024 * 1024),
-            )
-        }
+        if (bytes <= MAX_CACHED_SCRATCH_BYTES) return false
+        log.warn("Scratch {} array taking too much - {} - {}MB - {}x more",
+            type, elements, bytes / (1024 * 1024), bytes / MAX_CACHED_SCRATCH_BYTES,
+        )
+        return true
     }
 
     class ScratchIntArrayFactory(initialSize: Int) {
@@ -72,10 +77,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): IntArray {
+            if (tooLargeToCache(minSize, Int.SIZE_BYTES, "Int")) return IntArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = IntArray(minSize)
-                warnIfLarge(minSize, Int.SIZE_BYTES, "Int")
                 scratch.set(array)
             }
             return array
@@ -89,10 +94,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): BooleanArray {
+            if (tooLargeToCache(minSize, 1, "Boolean")) return BooleanArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = BooleanArray(minSize)
-                warnIfLarge(minSize, 1, "Boolean")
                 scratch.set(array)
             }
             return array
@@ -106,10 +111,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): LongArray {
+            if (tooLargeToCache(minSize, Long.SIZE_BYTES, "Long")) return LongArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = LongArray(minSize)
-                warnIfLarge(minSize, Long.SIZE_BYTES, "Long")
                 scratch.set(array)
             }
             return array
@@ -123,10 +128,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): DoubleArray {
+            if (tooLargeToCache(minSize, Double.SIZE_BYTES, "Double")) return DoubleArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = DoubleArray(minSize)
-                warnIfLarge(minSize, Double.SIZE_BYTES, "Double")
                 scratch.set(array)
             }
             return array
@@ -140,10 +145,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): FloatArray {
+            if (tooLargeToCache(minSize, Float.SIZE_BYTES, "Float")) return FloatArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = FloatArray(minSize)
-                warnIfLarge(minSize, Float.SIZE_BYTES, "Float")
                 scratch.set(array)
             }
             return array
@@ -157,10 +162,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): ShortArray {
+            if (tooLargeToCache(minSize, Short.SIZE_BYTES, "Short")) return ShortArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = ShortArray(minSize)
-                warnIfLarge(minSize, Short.SIZE_BYTES, "Short")
                 scratch.set(array)
             }
             return array
@@ -174,10 +179,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): ByteArray {
+            if (tooLargeToCache(minSize, 1, "Byte")) return ByteArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = ByteArray(minSize)
-                warnIfLarge(minSize, 1, "Byte")
                 scratch.set(array)
             }
             return array
@@ -191,10 +196,10 @@ object ArrayUtils {
         }
 
         operator fun invoke(minSize: Int): CharArray {
+            if (tooLargeToCache(minSize, Char.SIZE_BYTES, "Char")) return CharArray(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = CharArray(minSize)
-                warnIfLarge(minSize, Char.SIZE_BYTES, "Char")
                 scratch.set(array)
             }
             return array
@@ -209,10 +214,10 @@ object ArrayUtils {
 
         @Suppress("UNCHECKED_CAST")
         operator fun invoke(minSize: Int): Array<Any?> {
+            if (tooLargeToCache(minSize, OBJECT_REF_BYTES, "Object")) return arrayOfNulls(minSize)
             var array = scratch.get()
             if (array.size < minSize) {
                 array = arrayOfNulls<Any?>(minSize)
-                warnIfLarge(minSize, OBJECT_REF_BYTES, "Object")
                 scratch.set(array)
             }
             return array

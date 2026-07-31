@@ -188,6 +188,34 @@ class ArrayUtilsTest {
     }
 
     @Test
+    fun `oversized requests are served one-shot and never cached`() {
+        // Above 2MB per array the factory must hand out a fresh array each time and leave the
+        // thread-local cache untouched, so one spike cannot pin memory on the thread forever.
+        val overCapInts = 2 * 1024 * 1024 / Int.SIZE_BYTES + 1
+        val factory = ArrayUtils.ScratchIntArrayFactory(DEFAULT_CAPACITY)
+        onFreshThread {
+            val cached = factory(10)
+            val huge1 = factory(overCapInts)
+            val huge2 = factory(overCapInts)
+            assertEquals(overCapInts, huge1.size)
+            assertNotSame(huge1, huge2)
+            // The cached buffer was not evicted or replaced by the oversized request.
+            assertSame(cached, factory(10))
+        }
+
+        val overCapRefs = 2 * 1024 * 1024 / 4 + 1
+        val objectFactory = ArrayUtils.ScratchArrayFactory(DEFAULT_CAPACITY)
+        onFreshThread {
+            val cached = objectFactory(10)
+            val huge1 = objectFactory(overCapRefs)
+            val huge2 = objectFactory(overCapRefs)
+            assertEquals(overCapRefs, huge1.size)
+            assertNotSame(huge1, huge2)
+            assertSame(cached, objectFactory(10))
+        }
+    }
+
+    @Test
     fun `distinct int factories are independent`() {
         val primary = ArrayUtils.ScratchIntArrayFactory(DEFAULT_CAPACITY)
         val secondary = ArrayUtils.ScratchIntArrayFactory(DEFAULT_CAPACITY)
