@@ -1,9 +1,9 @@
 package fr.rowlaxx.springkutils.array
 
+import fr.rowlaxx.springkutils.array.ArrayUtils.MAX_CACHED_SCRATCH_BYTES
 import fr.rowlaxx.springkutils.concurrent.config.GlobalThreadConfiguration
 import fr.rowlaxx.springkutils.logging.utils.LoggerExtension.log
 import java.util.*
-import java.util.concurrent.ForkJoinWorkerThread
 
 object ArrayUtils {
     enum class Sorted { ASC, DESC, NONE }
@@ -53,7 +53,7 @@ object ArrayUtils {
         }
     }
 
-    private const val MAX_CACHED_SCRATCH_BYTES = 2L * 1024 * 1024
+    private const val MAX_CACHED_SCRATCH_BYTES = 4L * 1024 * 1024
     private const val OBJECT_REF_BYTES = 4
 
     /**
