@@ -12,12 +12,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.TaskDecorator
 import org.springframework.scheduling.concurrent.ConcurrentTaskExecutor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.RejectedExecutionHandler
-import java.util.concurrent.ThreadFactory
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 
