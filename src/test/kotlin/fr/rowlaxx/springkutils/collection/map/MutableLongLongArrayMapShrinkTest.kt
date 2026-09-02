@@ -71,35 +71,37 @@ class MutableLongLongArrayMapShrinkTest {
     }
 
     @Test
-    fun `maps at or below the minimum size never shrink`() {
-        // Ten entries in a capacity-64 map stay below the 16-entry floor, so removals never reallocate.
-        val a = filled(capacity = 64, count = 10)
-        assertEquals(64, capacity(a))
+    fun `arrays already at or below the minimum capacity never shrink`() {
+        // A capacity-16 map is already at the floor, so removals never reallocate it.
+        val a = filled(capacity = 16, count = 16)
+        assertEquals(16, capacity(a))
 
-        a.remove(0L); a.remove(9L); a.remove(5L)
-        assertEquals(7, a.size)
-        assertEquals(64, capacity(a))
+        a.remove(0L); a.remove(15L); a.remove(5L)
+        assertEquals(13, a.size)
+        assertEquals(16, capacity(a))
     }
 
     @Test
-    fun `shrinking halts at the minimum size and never collapses below it`() {
+    fun `a map that collapses to a handful of entries releases its peak capacity`() {
+        // The case that matters in production: a long-lived map spikes, then sits at a few entries.
+        // The floor is on capacity, so a small live size does not exempt it from shrinking.
+        val a = filled(capacity = 512, count = 400)
+        assertEquals(512, capacity(a))
+
+        a.removeIf { k, _ -> k >= 8 }
+        assertEquals(8, a.size)
+        // ceil(8 / 0.85) == 10, raised to the 16-element floor.
+        assertEquals(16, capacity(a))
+    }
+
+    @Test
+    fun `shrinking halts at the minimum capacity and never collapses below it`() {
         val a = filled(capacity = 256, count = 200)
 
-        // Remove down to exactly the 16-entry floor; the arrays shrink along the way.
-        for (k in 199 downTo 16) a.remove(k.toLong())
-        assertEquals(16, a.size)
-        val atMin = capacity(a)
-        assertTrue(atMin in 16..255, "capacity at the min size was $atMin")
-
-        // Dropping below the floor must not trigger any further reallocation.
-        a.remove(15L)
-        assertEquals(15, a.size)
-        assertEquals(atMin, capacity(a))
-
-        // Emptying it out entirely keeps the last capacity — it is never collapsed further.
-        for (k in 14 downTo 0) a.remove(k.toLong())
+        // Drain it entirely; the arrays shrink along the way but stop at the floor.
+        for (k in 199 downTo 0) a.remove(k.toLong())
         assertTrue(a.isEmpty())
-        assertEquals(atMin, capacity(a))
+        assertEquals(16, capacity(a))
     }
 
     // ---- correctness is preserved across shrinks --------------------------

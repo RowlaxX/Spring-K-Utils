@@ -380,14 +380,21 @@ class MutableLongLongArrayMap(initialCapacity: Int = 64) {
      * new size fills ~[SHRINK_TARGET_PERCENT]% of the smaller arrays (leaving a little headroom before
      * the next grow). A no-op when usage is still healthy or when shrinking wouldn't actually reduce
      * the capacity.
+     *
+     * The floor is on the *capacity*, not the live size: arrays at or below [MIN_SHRINK_CAPACITY] are
+     * already small enough that reallocating them is not worth the churn, and no shrink ever takes a
+     * map below it. Keying the floor on the live size instead would exempt exactly the maps that have
+     * collapsed the furthest — a long-lived map oscillating between a spike and a handful of entries
+     * would pin its peak capacity forever.
      */
     private fun maybeShrink() {
         val capacity = keys.size
         val n = end - start
-        if (n < MIN_SHRINK_SIZE) return
+        if (capacity <= MIN_SHRINK_CAPACITY) return
         if (n.toLong() * 100 >= capacity.toLong() * SHRINK_THRESHOLD_PERCENT) return
 
-        val newCapacity = maxOf(1, ((n.toLong() * 100 + (SHRINK_TARGET_PERCENT - 1)) / SHRINK_TARGET_PERCENT).toInt())
+        val target = ((n.toLong() * 100 + (SHRINK_TARGET_PERCENT - 1)) / SHRINK_TARGET_PERCENT).toInt()
+        val newCapacity = maxOf(MIN_SHRINK_CAPACITY, target)
         if (newCapacity >= capacity) return
 
         val newKeys = LongArray(newCapacity)
@@ -401,7 +408,7 @@ class MutableLongLongArrayMap(initialCapacity: Int = 64) {
     }
 
     companion object {
-        private const val MIN_SHRINK_SIZE = 16
+        private const val MIN_SHRINK_CAPACITY = 16
         private const val SHRINK_THRESHOLD_PERCENT = 70
         private const val SHRINK_TARGET_PERCENT = 85
 
