@@ -13,6 +13,10 @@ class  MutableSegmentedBitSet internal constructor(
      */
     constructor() : this(MutableLongLongArrayMap())
 
+    fun clear() {
+        content.clear()
+    }
+
     /**
      * Adds the specified number to this bit set.
      */
