@@ -255,7 +255,8 @@ class MutableLongObjectArrayMapCoverageTest {
 
     @Test
     fun `remove front advances start and nulls slot`() {
-        // Tight capacity so the single removal keeps usage at 75% (>= 70%) and no shrink recompacts.
+        // Tight capacity so the single removal keeps usage at 75% (above the 50% shrink mark) and no
+        // shrink recompacts.
         val a = MutableLongObjectArrayMap<String>(4)
         (0L..3L).forEach { a.put(it, "v$it") }
         val oldStart = startOf(a)
@@ -849,12 +850,12 @@ class MutableLongObjectArrayMapCoverageTest {
     }
 
     @Test
-    fun `ensureRoom doubles capacity when full and compacted`() {
+    fun `ensureRoom grows capacity when full and compacted`() {
         val a = MutableLongObjectArrayMap<Long>(4)
         for (i in 0L until 4L) a.put(i, i) // fills cap 4, start==0
         assertEquals(4, capacity(a))
         ensureRoom(a)
-        assertEquals(8, capacity(a)) // doubled
+        assertEquals(6, capacity(a)) // 4 * 1.5
         assertEquals(listOf(0L, 1L, 2L, 3L), a.keysInOrder())
     }
 
@@ -865,7 +866,7 @@ class MutableLongObjectArrayMapCoverageTest {
         a.remove(0L) // start=1, end=4, cap=4, end==cap so ensureRoom will compact
         val cap = capacity(a)
         ensureRoom(a)
-        // compaction frees room without doubling
+        // compaction frees room without growing
         assertEquals(cap, capacity(a))
         assertEquals(0, startOf(a))
         assertEquals(3, endOf(a))
@@ -873,15 +874,12 @@ class MutableLongObjectArrayMapCoverageTest {
     }
 
     @Test
-    fun `ensureRoom doubling preserves capacity via real append growth`() {
+    fun `ensureRoom grows capacity by 1_5x via real append growth`() {
         val a = MutableLongObjectArrayMap<Long>(2)
-        // initial cap 2; appending past should double repeatedly 2->4->8->...
+        // initial cap 2; appending past grows by 1.5x, so ~1.5x headroom is kept.
         for (i in 0L until 100L) a.put(i, i)
         assertTrue(capacity(a) >= 100)
-        // capacity must be a power-of-two multiple of 2 (doubling)
-        var c = 2
-        while (c < capacity(a)) c *= 2
-        assertEquals(c, capacity(a))
+        assertTrue(capacity(a) <= 150, "capacity ${capacity(a)} grew more than 1.5x")
         assertEquals((0L until 100L).toList(), a.keysInOrder())
     }
 
@@ -1125,7 +1123,7 @@ class MutableLongObjectArrayMapCoverageTest {
         for (i in 0L until n) a.put(i, sharedValue)
         val bytes = (bean.getThreadAllocatedBytes(tid) - before).toDouble() / n
         println("pure append bytes/element = ${"%.2f".format(bytes)}")
-        // Amortized growth: two arrays (long=8B + ref=4-8B) copied with doubling => < ~64 B/elem.
+        // Amortized growth: two arrays (long=8B + ref=4-8B) copied with 1.5x growth => < ~64 B/elem.
         // No boxing of keys (the whole point). Generous bound guards against per-put boxing regression.
         assertTrue(bytes < 64.0, "amortized append should be bounded (no per-put boxing), was $bytes")
     }

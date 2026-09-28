@@ -1,5 +1,8 @@
 package fr.rowlaxx.springkutils.collection.map
 
+import fr.rowlaxx.springkutils.collection.map.MutableLongObjectArrayMap.Companion.GROW_FACTOR
+import fr.rowlaxx.springkutils.collection.map.MutableLongObjectArrayMap.Companion.MIN_SHRINK_CAPACITY
+import fr.rowlaxx.springkutils.collection.map.MutableLongObjectArrayMap.Companion.SHRINK_FACTOR
 import java.util.*
 
 /**
@@ -262,6 +265,131 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
         end = 0
     }
 
+    /**
+     * Removes every entry whose key is before [at] — strictly `< at`, or `<= at` when [inclusive].
+     * O(log n) to find the boundary, then O(1) to advance [start] and null the freed value slots.
+     */
+    fun removeBefore(at: Long, inclusive: Boolean) {
+        if (end == start) return
+        val boundary = if (inclusive) upperBound(at) else lowerBound(at)
+        if (boundary <= start) return
+        Arrays.fill(values, start, boundary, null)
+        start = boundary
+        if (start == end) { start = 0; end = 0 }
+        maybeShrink()
+    }
+
+    /**
+     * Removes every entry whose key is after [at] — strictly `> at`, or `>= at` when [inclusive].
+     * O(log n) to find the boundary, then O(1) to shrink [end] and null the freed value slots.
+     */
+    fun removeAfter(at: Long, inclusive: Boolean) {
+        if (end == start) return
+        val boundary = if (inclusive) lowerBound(at) else upperBound(at)
+        if (boundary >= end) return
+        Arrays.fill(values, boundary, end, null)
+        end = boundary
+        if (start == end) { start = 0; end = 0 }
+        maybeShrink()
+    }
+
+    /**
+     * Removes every entry whose key falls inside [range], both bounds inclusive. Binary-searches the
+     * two boundaries, then closes the hole. A range that touches [start] just advances it and a range
+     * that touches [end] just shrinks it, so neither copies; only a hole strictly inside the live
+     * window pays one `System.arraycopy` of the surviving tail.
+     */
+    fun removeRange(range: LongRange) {
+        if (end == start || range.isEmpty()) return
+        val from = lowerBound(range.first)
+        val to = upperBound(range.last)
+        if (from >= to) return
+
+        if (from == start) {
+            Arrays.fill(values, start, to, null)
+            start = to
+            if (start == end) { start = 0; end = 0 }
+            maybeShrink()
+            return
+        }
+        if (to == end) {
+            Arrays.fill(values, from, end, null)
+            end = from
+            maybeShrink()
+            return
+        }
+
+        val kept = end - to
+        System.arraycopy(keys, to, keys, from, kept)
+        System.arraycopy(values, to, values, from, kept)
+        Arrays.fill(values, from + kept, end, null)
+        end = from + kept
+        maybeShrink()
+    }
+
+    /**
+     * Keeps only the [n] lowest keys, dropping the rest. O(1) window move plus nulling of the dropped
+     * value slots — no shifting. `n <= 0` empties the map, `n >= size` is a no-op.
+     */
+    fun retainFirst(n: Int) {
+        if (n >= size) return
+        retainWindow(start, if (n <= 0) start else start + n)
+    }
+
+    /**
+     * Keeps only the [n] highest keys, dropping the rest. O(1) window move plus nulling of the
+     * dropped value slots — no shifting. `n <= 0` empties the map, `n >= size` is a no-op.
+     */
+    fun retainLast(n: Int) {
+        if (n >= size) return
+        retainWindow(if (n <= 0) end else end - n, end)
+    }
+
+    /**
+     * Keeps only the entries whose 0-based position lies inside [range], dropping everything before
+     * and after. Positions are clamped to the live window, so a fully out-of-bounds or empty range
+     * clears the map and an over-wide range keeps everything. A range that touches an end is a
+     * shortcut to [retainFirst]/[retainLast]; only a range with entries on both sides nulls two tails.
+     */
+    fun retain(range: IntRange) {
+        val last = range.last.coerceAtMost(size - 1)
+        if (range.first > last) {
+            retainWindow(start, start)
+            return
+        }
+        if (range.first <= 0) {
+            retainFirst(last + 1)
+            return
+        }
+        if (last == size - 1) {
+            retainLast(size - range.first)
+            return
+        }
+        retainWindow(start + range.first, start + last + 1)
+    }
+
+    /**
+     * Narrows the live window to the absolute slice `[newStart, newEnd)`, nulling every value slot it
+     * drops. Bounds are clamped to the current `[start, end)`; an empty result resets the map to
+     * empty. O(dropped) with no array copy, followed by the usual post-removal shrink check.
+     */
+    private fun retainWindow(newStart: Int, newEnd: Int) {
+        val from = newStart.coerceIn(start, end)
+        val to = newEnd.coerceIn(start, end)
+        if (from >= to) {
+            Arrays.fill(values, start, end, null)
+            start = 0
+            end = 0
+            maybeShrink()
+            return
+        }
+        Arrays.fill(values, start, from, null)
+        Arrays.fill(values, to, end, null)
+        start = from
+        end = to
+        maybeShrink()
+    }
+
     private fun insertAbsent(key: Long, value: V) {
         ensureRoom()
         val ip = -(search(key) + 1) // insertion point in [start, end]
@@ -287,7 +415,7 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
             if (end < keys.size) return
         }
 
-        val newCapacity = keys.size * 2
+        val newCapacity = maxOf(keys.size + 1, (keys.size * GROW_FACTOR).toInt())
         keys = keys.copyOf(newCapacity)
         values = values.copyOf(newCapacity)
     }
@@ -313,12 +441,18 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
     }
 
     /**
-     * Called after a removal to release capacity retained by a transient size spike. Once the live
-     * size drops below [SHRINK_THRESHOLD_PERCENT]% of the backing arrays, they are reallocated so the
-     * new size fills ~[SHRINK_TARGET_PERCENT]% of the smaller arrays (leaving a little headroom before
-     * the next grow). The old, larger value array is dropped whole, releasing every reference in its
-     * now-unused slots. A no-op when usage is still healthy or when shrinking wouldn't actually
-     * reduce the capacity.
+     * Called after a removal to release capacity retained by a transient size spike. Shrinking is
+     * gated by [SHRINK_FACTOR] to leave a hysteresis gap against growth: growth multiplies the arrays
+     * by [GROW_FACTOR], so a freshly grown map sits at `1 / GROW_FACTOR` (= 66.7 %) full. Because
+     * `SHRINK_FACTOR > GROW_FACTOR`, that is still above the shrink low-water mark
+     * (`1 / SHRINK_FACTOR` = 50 %), so a single add or remove right after any resize can never
+     * trigger the opposite resize — only a sustained move of at least a third does.
+     *
+     * When the mark is crossed the arrays are reallocated so the live size fills `1 / GROW_FACTOR`
+     * (i.e. [GROW_FACTOR] times the live size, = 66.7 %) of the smaller arrays, which is itself above
+     * the low-water mark, so the shrink cannot immediately be undone by a grow either. The old,
+     * larger value array is dropped whole, releasing every reference in its now-unused slots. A no-op
+     * when usage is still healthy or when shrinking wouldn't actually reduce the capacity.
      *
      * The floor is on the *capacity*, not the live size: arrays at or below [MIN_SHRINK_CAPACITY] are
      * already small enough that reallocating them is not worth the churn, and no shrink ever takes a
@@ -330,10 +464,9 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
         val capacity = keys.size
         val n = end - start
         if (capacity <= MIN_SHRINK_CAPACITY) return
-        if (n.toLong() * 100 >= capacity.toLong() * SHRINK_THRESHOLD_PERCENT) return
+        if (n.toLong() * SHRINK_FACTOR >= capacity.toLong()) return
 
-        val target = ((n.toLong() * 100 + (SHRINK_TARGET_PERCENT - 1)) / SHRINK_TARGET_PERCENT).toInt()
-        val newCapacity = maxOf(MIN_SHRINK_CAPACITY, target)
+        val newCapacity = maxOf(MIN_SHRINK_CAPACITY, (n * GROW_FACTOR).toInt())
         if (newCapacity >= capacity) return
 
         val newKeys = LongArray(newCapacity)
@@ -348,7 +481,16 @@ class MutableLongObjectArrayMap<V>(initialCapacity: Int = 64) {
 
     private companion object {
         private const val MIN_SHRINK_CAPACITY = 16
-        private const val SHRINK_THRESHOLD_PERCENT = 70
-        private const val SHRINK_TARGET_PERCENT = 85
+
+        /** Capacity multiplier applied whenever the arrays fill up. */
+        private const val GROW_FACTOR = 1.5
+
+        /**
+         * Shrink only once the live size fits [SHRINK_FACTOR] times into the arrays. Must be strictly
+         * greater than [GROW_FACTOR] so the post-grow load (`1 / GROW_FACTOR`) stays above the shrink
+         * low-water mark (`1 / SHRINK_FACTOR`), which is what prevents a resize from being undone by
+         * the next add/remove.
+         */
+        private const val SHRINK_FACTOR = 2
     }
 }

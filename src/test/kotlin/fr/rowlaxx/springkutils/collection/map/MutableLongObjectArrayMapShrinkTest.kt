@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test
 
 /**
  * Covers the post-removal auto-shrink of [MutableLongObjectArrayMap]: once a removal drops the live
- * size below 70% of the backing arrays, they are reallocated so the live size fills ~85% of the new,
- * smaller arrays. This releases the capacity retained after a transient size spike (and, for the
- * object store, drops the references the freed slots used to pin).
+ * size below 50% of the backing arrays, they are reallocated so the live size fills 66.7% of the new,
+ * smaller arrays. The 50%/66.7% marks sit on opposite sides of the 66.7% load a freshly grown (×1.5)
+ * map lands on, so a single add/remove after any resize can never immediately undo it. This still
+ * releases the capacity retained after a transient size spike (and, for the object store, drops the
+ * references the freed slots used to pin).
  */
 class MutableLongObjectArrayMapShrinkTest {
 
@@ -34,44 +36,44 @@ class MutableLongObjectArrayMapShrinkTest {
     // ---- the feature ------------------------------------------------------
 
     @Test
-    fun `removeIf below 70 percent shrinks the backing arrays to about 85 percent full`() {
+    fun `removeIf below 50 percent shrinks the backing arrays to about 66_7 percent full`() {
         val a = filled(capacity = 1000, count = 1000)
         assertEquals(1000, capacity(a))
 
-        // Drop to 500 live entries in a single removal → one shrink evaluation.
-        a.removeIf { k, _ -> k >= 500 }
+        // Drop to 400 live entries (40% full) in a single removal → one shrink evaluation.
+        a.removeIf { k, _ -> k >= 400 }
 
-        assertEquals(500, a.size)
-        // ceil(500 / 0.85) == 589
-        assertEquals(589, capacity(a))
+        assertEquals(400, a.size)
+        // 1.5 * 400 == 600 (66.7% full).
+        assertEquals(600, capacity(a))
         val usage = a.size.toDouble() / capacity(a)
-        assertTrue(usage in 0.70..0.85 + 1e-9, "usage after shrink was $usage")
+        assertTrue(usage in 0.50..0.6667 + 1e-4, "usage after shrink was $usage")
     }
 
     @Test
-    fun `no shrink while usage stays at or above 70 percent`() {
+    fun `no shrink while usage stays at or above 50 percent`() {
         val a = filled(capacity = 1000, count = 1000)
 
-        // Keep 800 of 1000 → 80% full, above the low-water mark.
-        a.removeIf { k, _ -> k >= 800 }
+        // Keep 600 of 1000 → 60% full, above the low-water mark.
+        a.removeIf { k, _ -> k >= 600 }
 
-        assertEquals(800, a.size)
+        assertEquals(600, a.size)
         assertEquals(1000, capacity(a))
     }
 
     @Test
-    fun `single-key removals shrink exactly at the 70 percent boundary`() {
+    fun `single-key removals shrink exactly at the 50 percent boundary`() {
         val a = filled(capacity = 100, count = 100)
 
-        // Remove down to 70 live entries: still exactly 70% full, so no shrink yet.
-        for (k in 99 downTo 70) a.remove(k.toLong())
-        assertEquals(70, a.size)
+        // Remove down to 50 live entries: still exactly 50%, so no shrink yet.
+        for (k in 99 downTo 50) a.remove(k.toLong())
+        assertEquals(50, a.size)
         assertEquals(100, capacity(a))
 
-        // The next removal drops to 69/100 = 69% → shrink. ceil(69 / 0.85) == 82.
-        a.remove(69L)
-        assertEquals(69, a.size)
-        assertEquals(82, capacity(a))
+        // The next removal drops to 49/100 → below 50% → shrink. 1.5 * 49 == 73.
+        a.remove(49L)
+        assertEquals(49, a.size)
+        assertEquals(73, capacity(a))
     }
 
     @Test
@@ -94,7 +96,7 @@ class MutableLongObjectArrayMapShrinkTest {
 
         a.removeIf { k, _ -> k >= 8 }
         assertEquals(8, a.size)
-        // ceil(8 / 0.85) == 10, raised to the 16-element floor.
+        // 1.5 * 8 == 12, raised to the 16-element floor.
         assertEquals(16, capacity(a))
     }
 
@@ -113,9 +115,9 @@ class MutableLongObjectArrayMapShrinkTest {
     @Test
     fun `contents survive a shrink intact and in order`() {
         val a = filled(capacity = 1000, count = 1000)
-        a.removeIf { k, _ -> k >= 400 } // keep 0..399
+        a.removeIf { k, _ -> k >= 200 } // keep 0..199, 40% full → forces a shrink
 
-        assertEquals(400, a.size)
+        assertEquals(200, a.size)
         assertTrue(capacity(a) < 1000)
 
         val seen = ArrayList<Long>(a.size)
@@ -123,10 +125,10 @@ class MutableLongObjectArrayMapShrinkTest {
             seen.add(k)
             assertEquals("v$k", v)
         }
-        assertEquals((0L until 400L).toList(), seen)
+        assertEquals((0L until 200L).toList(), seen)
         assertEquals("v0", a[0L])
-        assertEquals("v399", a[399L])
-        assertNull(a[400L])
+        assertEquals("v199", a[199L])
+        assertNull(a[200L])
     }
 
     @Test
@@ -138,10 +140,10 @@ class MutableLongObjectArrayMapShrinkTest {
             reference[k] = "v$k"
         }
 
-        // Remove every third key, then thin out further — crossing several shrink points.
+        // Thin out heavily, keeping only every tenth key — crossing several shrink points.
         var removed = 0
         for (k in 0 until 2000L) {
-            if (k % 3 == 0L || k % 7 == 0L) {
+            if (k % 10 != 0L) {
                 a.remove(k)
                 reference.remove(k)
                 removed++
