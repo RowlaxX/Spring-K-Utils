@@ -227,8 +227,6 @@ object ArrayUtils {
     @Suppress("UNCHECKED_CAST")
     @JvmName("drainAny")
     fun <T> Array<Any?>.drain(n: Int): List<T> {
-        if (n == 0) return emptyList()
-
         val out = slice(0 until n) as List<T>
         fill(null, 0, n)
         return out
