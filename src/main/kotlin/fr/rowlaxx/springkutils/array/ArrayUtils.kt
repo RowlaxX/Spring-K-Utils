@@ -338,12 +338,24 @@ object ArrayUtils {
 
         val count get() = keyCount
 
+        /** Smallest key present, or throws when the grouping is empty. */
+        val firstKey: Long
+            get() = if (keyCount == 0) throw NoSuchElementException() else keys[0]
+
+        /** Largest key present, or throws when the grouping is empty. */
+        val lastKey: Long
+            get() = if (keyCount == 0) throw NoSuchElementException() else keys[keyCount - 1]
+
     }
 
     private const val GROUP_SCRATCH_SIZE = 64
     private val GROUP_KEYS = ScratchLongArrayFactory(GROUP_SCRATCH_SIZE)
     private val GROUP_CUM_END = ScratchIntArrayFactory(GROUP_SCRATCH_SIZE)
     private val GROUP_VALUES = ScratchArrayFactory(GROUP_SCRATCH_SIZE)
+
+    // Scratch for the sparse stable merge sort, so it never allocates a merge buffer per call.
+    private val GROUP_SORT_KEYS = ScratchLongArrayFactory(GROUP_SCRATCH_SIZE)
+    private val GROUP_SORT_VALUES = ScratchArrayFactory(GROUP_SCRATCH_SIZE)
 
     @Suppress("UNCHECKED_CAST")
     fun <T> List<T>.unsafeGroupBy(key: (T) -> Long): GroupedBy<T> {
@@ -362,51 +374,89 @@ object ArrayUtils {
             return GroupedBy(groupKeys, groupCumEnd, groupValues, 1)
         }
 
-        var minKey = Long.MAX_VALUE
-        var maxKey = Long.MIN_VALUE
-
-        for (i in 0 until n) {
-            val k = key(this[i])
-            if (k < minKey) minKey = k
-            if (k > maxKey) maxKey = k
-        }
-
-        if (minKey == maxKey) {
-            val groupValues = GROUP_VALUES(n)
-            val groupKeys = GROUP_KEYS(1)
-            val groupCumEnd = GROUP_CUM_END(1)
-            groupKeys[0] = minKey
-            groupCumEnd[0] = n
-
-            for (i in 0 until n) {
-                groupValues[i] = this[i]
-            }
-
-            return GroupedBy(groupKeys, groupCumEnd, groupValues, 1)
-        }
-
         val group = GROUP_VALUES(n)
         val groupKeys = GROUP_KEYS(n)
         val groupCumEnd = GROUP_CUM_END(n)
 
-        val span = maxKey - minKey
-        val keyCount = if (span in 0 until n) {
-            denseGroup(this, key, group, groupKeys, groupCumEnd, minKey, (span + 1).toInt(), n)
+        // One pass over the input: materialise every key exactly once (the array is reused below as
+        // the group-key workspace), track the min/max, and note whether the keys already arrive in
+        // non-decreasing order.
+        var minKey = Long.MAX_VALUE
+        var maxKey = Long.MIN_VALUE
+        var sorted = true
+        for (i in 0 until n) {
+            val k = key(this[i])
+            groupKeys[i] = k
+            if (k < minKey) minKey = k
+            if (k > maxKey) maxKey = k
+            if (i != 0 && k < groupKeys[i - 1]) sorted = false
         }
-        else {
-            sparseGroup(this, key, group, groupKeys, groupCumEnd, n)
+
+        val keyCount = when {
+            minKey == maxKey -> {
+                for (i in 0 until n) group[i] = this[i]
+                groupKeys[0] = minKey
+                groupCumEnd[0] = n
+                1
+            }
+
+            // Already ordered (the common, time-ordered case): one contiguous linear pass, no counting
+            // sort and no second key call.
+            sorted -> linearGroup(this, groupKeys, group, groupCumEnd, n)
+
+            else -> {
+                val span = maxKey - minKey
+                if (span in 0 until n) {
+                    denseGroup(this, groupKeys, group, groupCumEnd, minKey, (span + 1).toInt(), n)
+                }
+                else {
+                    sparseGroup(this, groupKeys, group, groupCumEnd, n)
+                }
+            }
         }
 
         return GroupedBy(groupKeys, groupCumEnd, group, keyCount)
     }
 
+    /**
+     * Groups [n] already non-decreasing keys in a single linear pass, preserving source order. Distinct
+     * keys are compacted over the front of [codes]: safe because no code is read once its slot is
+     * written (writes only ever target an index below the cursor).
+     */
+    private fun <T> linearGroup(
+        source: List<T>, codes: LongArray,
+        group: Array<Any?>, groupCumEnd: IntArray, n: Int,
+    ): Int {
+        for (i in 0 until n) group[i] = source[i]
+
+        var g = 0
+        var prev = codes[0]
+        for (i in 1 until n) {
+            val k = codes[i]
+            if (k != prev) {
+                codes[g] = prev
+                groupCumEnd[g] = i
+                g++
+                prev = k
+            }
+        }
+        codes[g] = prev
+        groupCumEnd[g] = n
+        return g + 1
+    }
+
+    /**
+     * Counting-sort grouping for a dense key range ([range] <= [n]). [codes] holds every element's key
+     * (so the key function is not re-invoked) and receives the compacted distinct keys on return.
+     * Stable: elements sharing a key stay in source order.
+     */
     private fun <T> denseGroup(
-        source: List<T>, key: (T) -> Long,
-        group: Array<Any?>, groupKeys: LongArray, groupCumEnd: IntArray,
+        source: List<T>, codes: LongArray,
+        group: Array<Any?>, groupCumEnd: IntArray,
         minKey: Long, range: Int, n: Int,
     ): Int {
         for (b in 0 until range) groupCumEnd[b] = 0
-        for (i in 0 until n) groupCumEnd[(key(source[i]) - minKey).toInt()]++
+        for (i in 0 until n) groupCumEnd[(codes[i] - minKey).toInt()]++
 
         var offset = 0
         for (b in 0 until range) {
@@ -416,8 +466,7 @@ object ArrayUtils {
         }
 
         for (i in 0 until n) {
-            val item = source[i]
-            group[groupCumEnd[(key(item) - minKey).toInt()]++] = item
+            group[groupCumEnd[(codes[i] - minKey).toInt()]++] = source[i]
         }
 
         var g = 0
@@ -425,7 +474,7 @@ object ArrayUtils {
         for (b in 0 until range) {
             val end = groupCumEnd[b]
             if (end > prevEnd) {
-                groupKeys[g] = minKey + b
+                codes[g] = minKey + b
                 groupCumEnd[g] = end
                 g++
                 prevEnd = end
@@ -434,29 +483,83 @@ object ArrayUtils {
         return g
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /**
+     * Sparse grouping (key span > n): a stable bottom-up merge sort over the precomputed [codes] and
+     * the [group] values, then a linear run-compaction into [codes]/[groupCumEnd]. The merge buffers
+     * are thread-local scratch, so the sort never allocates; [codes] never re-invokes the key function.
+     */
     private fun <T> sparseGroup(
-        source: List<T>, key: (T) -> Long,
-        group: Array<Any?>, groupKeys: LongArray, groupCumEnd: IntArray, n: Int,
+        source: List<T>, codes: LongArray,
+        group: Array<Any?>, groupCumEnd: IntArray, n: Int,
     ): Int {
         for (i in 0 until n) group[i] = source[i]
-        Arrays.sort(group, 0, n, { a, b -> key(a as T).compareTo(key(b as T)) })
+
+        sortByCode(codes, group, GROUP_SORT_KEYS(n), GROUP_SORT_VALUES(n), n)
 
         var g = 0
-        var prev = key(group[0] as T)
-        groupKeys[0] = prev
+        var prev = codes[0]
         for (i in 1 until n) {
-            val k = key(group[i] as T)
+            val k = codes[i]
             if (k != prev) {
                 groupCumEnd[g] = i
                 g++
-                groupKeys[g] = k
+                codes[g] = k
                 prev = k
             }
         }
-
         groupCumEnd[g] = n
         return g + 1
+    }
+
+    /**
+     * Stable bottom-up merge sort of the parallel `([codes], [values])` arrays over `[0, n)`, using
+     * [tmpCodes]/[tmpValues] as ping-pong buffers. Writes the sorted result back into [codes] /
+     * [values] and clears [tmpValues] so it never pins element references. Stability (equal codes keep
+     * source order) is preserved by only taking from the right run on a strictly smaller code.
+     */
+    private fun sortByCode(
+        codes: LongArray, values: Array<Any?>,
+        tmpCodes: LongArray, tmpValues: Array<Any?>, n: Int,
+    ) {
+        var srcCodes = codes
+        var srcValues = values
+        var dstCodes = tmpCodes
+        var dstValues = tmpValues
+
+        var width = 1
+        while (width < n) {
+            var i = 0
+            while (i < n) {
+                val mid = minOf(i + width, n)
+                val end = minOf(i + 2 * width, n)
+                var l = i
+                var r = mid
+                var o = i
+
+                while (l < mid && r < end) {
+                    if (srcCodes[r] < srcCodes[l]) {
+                        dstCodes[o] = srcCodes[r]; dstValues[o] = srcValues[r]; r++
+                    } else {
+                        dstCodes[o] = srcCodes[l]; dstValues[o] = srcValues[l]; l++
+                    }
+                    o++
+                }
+                while (l < mid) { dstCodes[o] = srcCodes[l]; dstValues[o] = srcValues[l]; l++; o++ }
+                while (r < end) { dstCodes[o] = srcCodes[r]; dstValues[o] = srcValues[r]; r++; o++ }
+
+                i = end
+            }
+
+            val swapCodes = srcCodes; srcCodes = dstCodes; dstCodes = swapCodes
+            val swapValues = srcValues; srcValues = dstValues; dstValues = swapValues
+            width = width shl 1
+        }
+
+        if (srcCodes !== codes) {
+            System.arraycopy(srcCodes, 0, codes, 0, n)
+            System.arraycopy(srcValues, 0, values, 0, n)
+        }
+        java.util.Arrays.fill(tmpValues, 0, n, null)
     }
 }
 
