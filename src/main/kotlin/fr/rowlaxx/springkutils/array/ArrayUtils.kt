@@ -229,7 +229,7 @@ object ArrayUtils {
     fun <T> Array<Any?>.drain(n: Int): List<T> {
         if (n == 0) return emptyList()
 
-        val out = copyOfRange(0, n + 1).asList() as List<T>
+        val out = copyOfRange(0, n).asList() as List<T>
         fill(null, 0, n)
         return out
     }
