@@ -6,7 +6,6 @@ import fr.rowlaxx.springkutils.array.ArrayUtils.asList
 import fr.rowlaxx.springkutils.array.ArrayUtils.drain
 import fr.rowlaxx.springkutils.array.ArrayUtils.clear
 import fr.rowlaxx.springkutils.array.ArrayUtils.sortedDirection
-import fr.rowlaxx.springkutils.array.ArrayUtils.unsafeGroupBy
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -14,15 +13,14 @@ import java.lang.management.ManagementFactory
 import java.util.concurrent.ForkJoinPool
 
 /**
- * Gap-filling coverage for [ArrayUtils] beyond `ArrayUtilsTest` and `ArrayUtilsGroupingTest`.
+ * Gap-filling coverage for [ArrayUtils] beyond `ArrayUtilsTest` (grouping lives in `GroupByUtilsTest`).
  *
  * Focus areas not already exercised by the sibling suites:
  *  - the **`LongArray.sortedDirection`** overload (the existing suite only tests Int & Double);
  *  - sortedness corner cases (NaN, equal runs, single boundary inversions, sub-window edges);
  *  - many grow/reuse cycles of every scratch factory, including the **zero-allocation reuse**
  *    guarantee that is the factories' whole reason to exist;
- *  - grouping internals reached only via reflection and additional dense/sparse boundary states;
- *  - performance/memory benchmarks proving scratch reuse and grouping reuse allocate ~zero.
+ *  - performance/memory benchmarks proving scratch reuse allocates ~zero.
  *
  * The scratch pools cache one buffer per thread and never shrink, so pool assertions run on a fresh
  * [Thread] (pristine ThreadLocal) — mirroring `ArrayUtilsTest.onFreshThread`.
@@ -44,16 +42,6 @@ class ArrayUtilsCoverageTest {
         error[0]?.let { throw it }
         @Suppress("UNCHECKED_CAST")
         return box[0] as T
-    }
-
-    private data class E(val key: Long, val id: Int)
-    private fun e(key: Long, id: Int) = E(key, id)
-
-    /** Materialises a GroupedBy into ordered (key, ids) before scratch is reused. */
-    private fun <T> ArrayUtils.GroupedBy<T>.snapshot(idOf: (T) -> Int): List<Pair<Long, List<Int>>> {
-        val out = ArrayList<Pair<Long, List<Int>>>()
-        forEach { key, list -> out.add(key to list.map(idOf)) }
-        return out
     }
 
     // =============================================================================================
@@ -412,122 +400,6 @@ class ArrayUtilsCoverageTest {
     }
 
     // =============================================================================================
-    // Grouping — additional dense/sparse boundary & accessor states
-    // =============================================================================================
-
-    @Test
-    fun `two elements one key takes the min-equals-max fast path`() {
-        val g = listOf(e(5, 0), e(5, 1)).unsafeGroupBy { it.key }
-        assertEquals(1, g.count)
-        assertEquals(listOf(5L to listOf(0, 1)), g.snapshot { it.id })
-    }
-
-    @Test
-    fun `dense path span exactly n with a gap key present`() {
-        // keys {0,2}, n=2, span=3 > 2 -> sparse; verify the boundary the OTHER way:
-        // keys {0,1}, n=2, span=2 == n -> dense
-        val g = listOf(e(1, 1), e(0, 0)).unsafeGroupBy { it.key }
-        assertEquals(listOf(0L to listOf(0), 1L to listOf(1)), g.snapshot { it.id })
-    }
-
-    @Test
-    fun `dense path with empty intermediate buckets skips absent keys`() {
-        // keys {0, 4}, span=5 <= n=6 -> dense; buckets 1,2,3 stay empty and must be skipped.
-        val items = listOf(e(0, 0), e(4, 1), e(0, 2), e(4, 3), e(0, 4), e(4, 5))
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(2, g.count)
-        assertEquals(
-            listOf(0L to listOf(0, 2, 4), 4L to listOf(1, 3, 5)),
-            g.snapshot { it.id },
-        )
-    }
-
-    @Test
-    fun `dense path with all negative keys and a gap`() {
-        val items = listOf(e(-5, 0), e(-3, 1), e(-5, 2), e(-3, 3))
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(
-            listOf(-5L to listOf(0, 2), -3L to listOf(1, 3)),
-            g.snapshot { it.id },
-        )
-    }
-
-    @Test
-    fun `sparse path many distinct keys descending input sorted ascending`() {
-        val items = (0 until 10).map { e((10_000L * (10 - it)), it) }
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(10, g.count)
-        val keys = buildList { g.forEachKey { add(it) } }
-        assertEquals(keys.sorted(), keys)
-    }
-
-    @Test
-    fun `sparse path stable for many duplicates of two far keys`() {
-        val items = (0 until 20).map { e(if (it % 2 == 0) 0L else 5_000_000L, it) }
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(2, g.count)
-        assertEquals((0 until 20 step 2).toList(), g[0L].map { it.id })
-        assertEquals((1 until 20 step 2).toList(), g[5_000_000L].map { it.id })
-    }
-
-    @Test
-    fun `contains finds present key and rejects gaps in dense grouping`() {
-        val g = listOf(e(0, 0), e(2, 1), e(4, 2)).unsafeGroupBy { it.key } // sparse (span 5 > 3)
-        assertTrue(g.contains(0L)); assertTrue(g.contains(2L)); assertTrue(g.contains(4L))
-        assertFalse(g.contains(1L)); assertFalse(g.contains(3L)); assertFalse(g.contains(5L))
-    }
-
-    @Test
-    fun `first and last on a single dense group are identical and complete`() {
-        val items = (0 until 4).map { e(0L, it) }
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(listOf(0, 1, 2, 3), g.first().map { it.id })
-        assertEquals(listOf(0, 1, 2, 3), g.last().map { it.id })
-    }
-
-    @Test
-    fun `get on absent key beyond max returns empty`() {
-        val g = listOf(e(1, 0), e(2, 1)).unsafeGroupBy { it.key }
-        assertTrue(g[100L].isEmpty())
-        assertTrue(g[Long.MIN_VALUE].isEmpty())
-    }
-
-    @Test
-    fun `group list iteration via for-loop yields all members`() {
-        val g = listOf(e(1, 7), e(1, 8), e(1, 9)).unsafeGroupBy { it.key }
-        val ids = ArrayList<Int>()
-        for (item in g[1L]) ids.add(item.id)
-        assertEquals(listOf(7, 8, 9), ids)
-    }
-
-    @Test
-    fun `clear after dense grouping nulls every backing slot`() {
-        val items = listOf(e(0, 0), e(1, 1), e(2, 2))
-        val g = items.unsafeGroupBy { it.key }
-        val views = (0L..2L).map { g[it] }
-        g.close()
-        @Suppress("UNCHECKED_CAST")
-        for (v in views) assertNull((v as List<Any?>)[0])
-    }
-
-    @Test
-    fun `larger sparse input groups every element exactly once`() {
-        val items = (0 until 500).map { e((it % 25).toLong() * 1_000_000L, it) }
-        val g = items.unsafeGroupBy { it.key }
-        assertEquals(25, g.count)
-        var total = 0
-        g.forEach { _, list -> total += list.size }
-        assertEquals(500, total)
-    }
-
-    @Test
-    fun `grouping by constant key collapses to one group regardless of size`() {
-        val g = (0 until 100).map { e(it.toLong(), it) }.unsafeGroupBy { 0L }
-        assertEquals(1, g.count)
-        assertEquals(100, g.first().size)
-    }
-
-    // =============================================================================================
     // Private internals via reflection
     // =============================================================================================
 
@@ -561,23 +433,6 @@ class ArrayUtilsCoverageTest {
         @Suppress("UNCHECKED_CAST")
         val view = ctor.newInstance(backing, 1, 3) as List<String>
         assertEquals(listOf("b", "c"), view)
-    }
-
-    @Test
-    fun `denseGroup and sparseGroup produce the same shape via reflection`() {
-        // Sanity check both private grouping kernels are reachable & symbol-stable. We invoke the
-        // public unsafeGroupBy which dispatches to each, asserting identical logical output, since
-        // the private methods take a closure parameter that is awkward to pass through reflection.
-        val dense = listOf(e(0, 0), e(1, 1), e(2, 2), e(1, 3)) // span 3 <= n 4 -> dense
-        val sparse = listOf(e(0, 0), e(99, 1), e(198, 2), e(99, 3)) // span 199 > 4 -> sparse
-        assertEquals(
-            listOf(listOf(0), listOf(1, 3), listOf(2)),
-            dense.unsafeGroupBy { it.key }.snapshot { it.id }.map { it.second },
-        )
-        assertEquals(
-            listOf(listOf(0), listOf(1, 3), listOf(2)),
-            sparse.unsafeGroupBy { it.key }.snapshot { it.id }.map { it.second },
-        )
     }
 
     // =============================================================================================
@@ -661,58 +516,6 @@ class ArrayUtilsCoverageTest {
         }
     }
 
-    @Test
-    fun `unsafeGroupBy reuses scratch and allocates only the result wrapper within capacity`() {
-        val bean = ManagementFactory.getThreadMXBean() as ThreadMXBean
-        assumeTrue(bean.isThreadAllocatedMemorySupported)
-
-        onFreshThread {
-            // Stay within the GROUP_SCRATCH_SIZE (64) capacity so no scratch buffer regrows.
-            val data = (0 until 32).map { e((it % 8).toLong(), it) }
-            // Prime: grows the shared group scratch to >= 32 once, then it stays put.
-            data.unsafeGroupBy { it.key }
-
-            val op: (Int) -> Unit = { val g = data.unsafeGroupBy { it.key }; g.count }
-            repeat(100_000) { op(it) }
-
-            val iterations = 1_000_000
-            val perOp = bytesPerOp(iterations) { op(it) }
-
-            println("=== unsafeGroupBy bytes/op (n=32, within scratch) = ${"%.2f".format(perOp)} ===")
-            // The counting-sort path reuses thread-local scratch; only the small GroupedBy wrapper
-            // (+ the lambda capture) is fresh. Asserting well under a single 32-element array (~272 B
-            // boxed) — the scratch buffers themselves (keys/cumEnd/values, hundreds of bytes) are NOT
-            // re-allocated each call.
-            assertTrue(perOp < 256.0,
-                "grouping within scratch capacity should allocate ~only the wrapper: $perOp bytes/op")
-        }
-    }
-
-    @Test
-    fun `repeated grouping does not grow allocation per op as it would with fresh maps`() {
-        val bean = ManagementFactory.getThreadMXBean() as ThreadMXBean
-        assumeTrue(bean.isThreadAllocatedMemorySupported)
-
-        onFreshThread {
-            val data = (0 until 50).map { e((it % 10).toLong(), it) }
-            data.unsafeGroupBy { it.key } // prime scratch
-
-            val groupOp: (Int) -> Unit = { data.unsafeGroupBy { it.key }.count }
-            // Reference: a fresh HashMap grouping boxes keys + allocates nodes per element.
-            val mapOp: (Int) -> Unit = { data.groupBy { it.key }.size }
-
-            repeat(50_000) { groupOp(it); mapOp(it) }
-
-            val iterations = 500_000
-            val groupBytes = bytesPerOp(iterations) { groupOp(it) }
-            val mapBytes = bytesPerOp(iterations) { mapOp(it) }
-
-            println("=== unsafeGroupBy bytes/op=${"%.2f".format(groupBytes)}  stdlib groupBy bytes/op=${"%.2f".format(mapBytes)} ===")
-            assertTrue(groupBytes < mapBytes * 0.5,
-                "unsafeGroupBy should at least halve allocation vs stdlib groupBy: ours=$groupBytes std=$mapBytes")
-        }
-    }
-
     // ---------------------------------------------------------------------------------------------
     // asList — bounded, live view over an Array<Any?> sub-range
     // ---------------------------------------------------------------------------------------------
@@ -767,37 +570,5 @@ class ArrayUtilsCoverageTest {
         val view = arr.asList<String>(1, 3) // ["b", "c"], size 2
         assertThrows(IndexOutOfBoundsException::class.java) { view[2] }
         assertThrows(IndexOutOfBoundsException::class.java) { view[-1] }
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // unsafeGroupBy — span-overflow guard on the dense/sparse decision
-    // ---------------------------------------------------------------------------------------------
-
-    @Test
-    fun `unsafeGroupBy handles keys whose span overflows Long`() {
-        // maxKey - minKey overflows Long here (MIN..MAX wraps to -1). The old decision read that as a
-        // tiny span and drove the dense path with a bogus zero range, indexing out of bounds (or losing
-        // every element); the overflow guard must instead pick the sparse path and group correctly.
-        val items = listOf(e(Long.MIN_VALUE, 0), e(5L, 1), e(Long.MAX_VALUE, 2), e(5L, 3))
-        val g = items.unsafeGroupBy { it.key }
-
-        assertEquals(3, g.count)
-        assertEquals(listOf(0), g[Long.MIN_VALUE].map { it.id })
-        assertEquals(listOf(1, 3), g[5L].map { it.id })
-        assertEquals(listOf(2), g[Long.MAX_VALUE].map { it.id })
-        assertTrue(g[12_345L].isEmpty())
-    }
-
-    @Test
-    fun `unsafeGroupBy still takes the dense path for a small contiguous span`() {
-        // Regression guard for the rewritten branch: a genuinely small span must remain dense and group
-        // correctly (the overflow guard must not accidentally force everything to sparse).
-        val items = listOf(e(10L, 0), e(11L, 1), e(10L, 2), e(12L, 3))
-        val g = items.unsafeGroupBy { it.key }
-
-        assertEquals(3, g.count)
-        assertEquals(listOf(0, 2), g[10L].map { it.id })
-        assertEquals(listOf(1), g[11L].map { it.id })
-        assertEquals(listOf(3), g[12L].map { it.id })
     }
 }
